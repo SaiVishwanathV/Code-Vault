@@ -1,8 +1,8 @@
-# 🚀 CodeTracker Pro
+# 🚀 Code Vault
 
-**CodeTracker Pro** is a modern, production-grade DSA (Data Structures & Algorithms) Problem Tracker and interview preparation platform built with **React (Vite) + Tailwind CSS + Supabase (PostgreSQL + Email OTP Authentication)**.
+**Code Valut** is a modern, production-grade DSA (Data Structures & Algorithms) Problem Tracker and interview preparation platform built with **React (Vite) + Tailwind CSS + Supabase (PostgreSQL + Email OTP Authentication)**.
 
-Designed with the aesthetics of **GitHub + LeetCode + Notion**, CodeTracker Pro enables software engineers to track problem-solving across platforms (LeetCode, Codeforces, HackerRank, GFG, CodeChef, Striver SDE, AtCoder), manage markdown notes, maintain coding streaks, view analytics, and master spaced repetition.
+Designed with the aesthetics of **GitHub + LeetCode + Notion**, Code Vault enables software engineers to track problem-solving across platforms (LeetCode, Codeforces, HackerRank, GFG, CodeChef, Striver SDE, AtCoder), manage markdown notes, maintain coding streaks, view analytics, and master spaced repetition.
 
 ---
 
