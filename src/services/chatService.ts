@@ -1,14 +1,12 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ChatMessage, ChatRoom, Profile } from '../types';
 
-const ROOMS_STORAGE_KEY = 'codevault_chat_rooms_v2';
-const MESSAGES_STORAGE_KEY = 'codevault_chat_messages_v2';
+const ROOMS_STORAGE_KEY = 'codevault_chat_rooms_v5';
+const MESSAGES_STORAGE_KEY = 'codevault_chat_messages_v5';
 
 function getStoredRooms(): ChatRoom[] {
   const raw = localStorage.getItem(ROOMS_STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
+  if (!raw) return [];
   try {
     return JSON.parse(raw);
   } catch {
@@ -22,9 +20,7 @@ function saveStoredRooms(rooms: ChatRoom[]) {
 
 function getStoredMessages(): Record<string, ChatMessage[]> {
   const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
-  if (!raw) {
-    return {};
-  }
+  if (!raw) return {};
   try {
     return JSON.parse(raw);
   } catch {
@@ -38,7 +34,153 @@ function saveStoredMessages(messagesMap: Record<string, ChatMessage[]>) {
 
 export const chatService = {
   /**
-   * Fetch all open & user private rooms from database
+   * Fetch all registered users for autocomplete in invitations
+   */
+  async getAvailableUsers(excludeUserId?: string): Promise<{ id: string; username: string; full_name: string; avatar_url?: string }[]> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .eq('status', 'active');
+
+        if (!error && data) {
+          return data.filter((u) => u.id !== excludeUserId);
+        }
+      } catch (err) {
+        console.error('Error fetching available users:', err);
+      }
+    }
+    return [];
+  },
+
+  /**
+   * Fetch pending room invitations specifically addressed to the current user
+   */
+  async getPendingInvitations(currentUser?: Profile | null): Promise<ChatRoom[]> {
+    if (!currentUser || !currentUser.username) return [];
+
+    const myUsername = currentUser.username.toLowerCase().trim().replace(/^@/, '');
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data: dbRooms, error } = await supabase
+          .from('chat_rooms')
+          .select('*')
+          .eq('is_private', true);
+
+        if (!error && dbRooms) {
+          return dbRooms.filter((r) => {
+            const rawInvites = Array.isArray(r.invited_usernames) ? r.invited_usernames : [];
+            const cleanInvites = rawInvites.map((u: string) => String(u).toLowerCase().trim().replace(/^@/, ''));
+            const isInvited = cleanInvites.includes(myUsername);
+
+            const joined = Array.isArray(r.joined_user_ids) ? r.joined_user_ids : [];
+            const alreadyJoined = joined.includes(currentUser.id);
+            const isCreator = r.created_by === currentUser.id;
+
+            return isInvited && !alreadyJoined && !isCreator;
+          }) as ChatRoom[];
+        }
+      } catch (err) {
+        console.error('Error fetching pending invitations from Supabase:', err);
+      }
+    }
+
+    const rooms = getStoredRooms();
+    return rooms.filter((r) => {
+      const rawInvites = Array.isArray(r.invited_usernames) ? r.invited_usernames : [];
+      const cleanInvites = rawInvites.map((u: string) => String(u).toLowerCase().trim().replace(/^@/, ''));
+      const isInvited = r.is_private && cleanInvites.includes(myUsername);
+      const alreadyJoined = r.joined_user_ids?.includes(currentUser.id);
+      const isCreator = r.created_by === currentUser.id;
+      return isInvited && !alreadyJoined && !isCreator;
+    });
+  },
+
+  /**
+   * Accept an in-app room invitation and enter the room
+   */
+  async acceptRoomInvite(roomId: string, currentUser: Profile): Promise<ChatRoom> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('chat_rooms')
+          .select('*')
+          .eq('id', roomId)
+          .single();
+
+        if (error || !data) throw new Error('Room not found in database');
+
+        const currentJoined = Array.isArray(data.joined_user_ids) ? data.joined_user_ids : [];
+        if (!currentJoined.includes(currentUser.id)) {
+          const updatedJoined = [...currentJoined, currentUser.id];
+          const newMemberCount = (data.member_count || 1) + 1;
+
+          await supabase
+            .from('chat_rooms')
+            .update({
+              joined_user_ids: updatedJoined,
+              member_count: newMemberCount,
+            })
+            .eq('id', roomId);
+
+          data.joined_user_ids = updatedJoined;
+          data.member_count = newMemberCount;
+        }
+
+        return data as ChatRoom;
+      } catch (err: any) {
+        console.error('Supabase accept error:', err);
+        throw new Error(err.message || 'Failed to accept room invitation');
+      }
+    }
+
+    const rooms = getStoredRooms();
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) throw new Error('Room not found');
+
+    if (!room.joined_user_ids?.includes(currentUser.id)) {
+      room.joined_user_ids = [...(room.joined_user_ids || []), currentUser.id];
+      room.member_count = (room.member_count || 1) + 1;
+      saveStoredRooms(rooms);
+    }
+
+    return room;
+  },
+
+  /**
+   * Decline an in-app room invitation
+   */
+  async declineRoomInvite(roomId: string, currentUser: Profile): Promise<void> {
+    const myUsername = currentUser.username.toLowerCase().trim().replace(/^@/, '');
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data } = await supabase.from('chat_rooms').select('invited_usernames').eq('id', roomId).single();
+        if (data && Array.isArray(data.invited_usernames)) {
+          const filtered = data.invited_usernames.filter(
+            (u: string) => String(u).toLowerCase().trim().replace(/^@/, '') !== myUsername
+          );
+          await supabase.from('chat_rooms').update({ invited_usernames: filtered }).eq('id', roomId);
+        }
+      } catch (err) {
+        console.error('Failed to decline invitation on Supabase:', err);
+      }
+    }
+
+    const rooms = getStoredRooms();
+    const target = rooms.find((r) => r.id === roomId);
+    if (target && Array.isArray(target.invited_usernames)) {
+      target.invited_usernames = target.invited_usernames.filter(
+        (u) => String(u).toLowerCase().trim().replace(/^@/, '') !== myUsername
+      );
+      saveStoredRooms(rooms);
+    }
+  },
+
+  /**
+   * Fetch all open & user accessible private rooms from database
    */
   async getRooms(currentUser?: Profile | null): Promise<ChatRoom[]> {
     if (isSupabaseConfigured() && supabase) {
@@ -50,9 +192,11 @@ export const chatService = {
 
         if (!error && dbRooms) {
           return dbRooms.filter((r) => {
-            if (!r.is_private) return true;
+            if (!r.is_private) return true; // Open to all
             if (!currentUser) return false;
             if (r.created_by === currentUser.id) return true;
+            const joined = Array.isArray(r.joined_user_ids) ? r.joined_user_ids : [];
+            if (joined.includes(currentUser.id)) return true;
             return false;
           }) as ChatRoom[];
         }
@@ -67,13 +211,13 @@ export const chatService = {
     return rooms.filter((r) => {
       if (!r.is_private) return true;
       if (r.created_by === currentUser.id) return true;
-      if (r.invited_usernames?.includes(currentUser.username)) return true;
+      if (r.joined_user_ids?.includes(currentUser.id)) return true;
       return false;
     });
   },
 
   /**
-   * Create a new room (open or private)
+   * Create a new room (Open public room or Private room with direct invited users)
    */
   async createRoom(
     name: string,
@@ -84,6 +228,8 @@ export const chatService = {
     category: string = 'general',
     invitedUsernames: string[] = []
   ): Promise<ChatRoom> {
+    const cleanInvited = invitedUsernames.map((u) => u.trim().replace(/^@/, ''));
+
     const newRoom: ChatRoom = {
       id: `room-${Date.now()}`,
       name: name.trim(),
@@ -91,26 +237,39 @@ export const chatService = {
       is_private: isPrivate,
       max_members: maxMembers,
       created_by: currentUser.id,
+      creator_username: currentUser.username,
+      creator_name: currentUser.full_name,
       member_count: 1,
       created_at: new Date().toISOString(),
-      invited_usernames: invitedUsernames,
-      last_message: 'Room created. Start discussing algorithms and optimal approaches!',
+      invited_usernames: cleanInvited,
+      joined_user_ids: [currentUser.id],
+      last_message: isPrivate
+        ? `Private room created. Invitations sent to: ${cleanInvited.map((u) => '@' + u).join(', ')}`
+        : 'Open channel created. Welcome to the discussion!',
       last_activity: 'Just now',
       category: (category as any) || 'general',
     };
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('chat_rooms').insert({
+        const { error: insertError } = await supabase.from('chat_rooms').insert({
           id: newRoom.id,
           name: newRoom.name,
           description: newRoom.description,
           is_private: isPrivate,
           max_members: maxMembers,
           created_by: currentUser.id,
+          creator_username: currentUser.username,
+          creator_name: currentUser.full_name,
           member_count: 1,
           category: newRoom.category,
+          invited_usernames: newRoom.invited_usernames,
+          joined_user_ids: [currentUser.id],
         });
+
+        if (insertError) {
+          console.error('Error inserting room to Supabase:', insertError);
+        }
       } catch (err) {
         console.error('Failed to create room in Supabase:', err);
       }
@@ -120,16 +279,6 @@ export const chatService = {
     const updated = [newRoom, ...rooms];
     saveStoredRooms(updated);
     return newRoom;
-  },
-
-  async createPrivateRoom(
-    name: string,
-    description: string,
-    currentUser: Profile,
-    maxMembers: number = 10,
-    invitedUsernames: string[] = []
-  ): Promise<ChatRoom> {
-    return this.createRoom(name, description, currentUser, true, maxMembers, 'study_group', invitedUsernames);
   },
 
   /**
@@ -182,6 +331,71 @@ export const chatService = {
 
     const messages = getStoredMessages();
     return messages[roomId] || [];
+  },
+
+  /**
+   * Subscribe to real-time chat messages for a specific room
+   */
+  subscribeToRoom(roomId: string, onNewMessage: (msg: ChatMessage) => void): () => void {
+    if (isSupabaseConfigured() && supabase) {
+      const client = supabase;
+      try {
+        const channelName = `chat_channel_${roomId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const channel = client
+          .channel(channelName)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'chat_messages',
+              filter: `room_id=eq.${roomId}`,
+            },
+            async (payload: any) => {
+              const newRow = payload.new;
+              if (!newRow) return;
+
+              // Fetch sender profile details
+              let senderProfile: any = null;
+              try {
+                const { data } = await client
+                  .from('profiles')
+                  .select('username, full_name, avatar_url')
+                  .eq('id', newRow.user_id)
+                  .single();
+                senderProfile = data;
+              } catch {
+                // ignore
+              }
+
+              const formatted: ChatMessage = {
+                id: newRow.id,
+                room_id: newRow.room_id,
+                user_id: newRow.user_id,
+                username: senderProfile?.username || 'coder',
+                full_name: senderProfile?.full_name || 'Coder',
+                avatar_url: senderProfile?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${newRow.user_id}`,
+                content: newRow.content,
+                created_at: newRow.created_at,
+                is_pinned: newRow.is_pinned || false,
+                reply_to: newRow.reply_to,
+                shared_problem: newRow.shared_problem,
+                reactions: newRow.reactions || {},
+              };
+
+              onNewMessage(formatted);
+            }
+          )
+          .subscribe();
+
+        return () => {
+          client.removeChannel(channel);
+        };
+      } catch (err) {
+        console.error('Error setting up Supabase realtime channel:', err);
+      }
+    }
+    return () => {};
   },
 
   /**
@@ -308,6 +522,19 @@ export const chatService = {
    * Leave a study room
    */
   async leaveRoom(roomId: string, userId: string): Promise<void> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data } = await supabase.from('chat_rooms').select('joined_user_ids, member_count').eq('id', roomId).single();
+        if (data && Array.isArray(data.joined_user_ids)) {
+          const updatedJoined = data.joined_user_ids.filter((id: string) => id !== userId);
+          const newCount = Math.max(1, (data.member_count || 2) - 1);
+          await supabase.from('chat_rooms').update({ joined_user_ids: updatedJoined, member_count: newCount }).eq('id', roomId);
+        }
+      } catch (err) {
+        console.error('Error leaving room on Supabase:', err);
+      }
+    }
+
     const rooms = getStoredRooms();
     const updated = rooms.filter((r) => r.id !== roomId || r.created_by !== userId);
     saveStoredRooms(updated);

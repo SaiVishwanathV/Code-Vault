@@ -75,9 +75,14 @@ CREATE TABLE IF NOT EXISTS public.chat_rooms (
   is_private BOOLEAN DEFAULT FALSE,
   max_members INTEGER DEFAULT 50,
   created_by UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  creator_username TEXT,
+  creator_name TEXT,
   member_count INTEGER DEFAULT 1,
   category TEXT DEFAULT 'general',
   pinned_message_id TEXT,
+  room_code TEXT,
+  invited_usernames TEXT[] DEFAULT '{}'::text[],
+  joined_user_ids UUID[] DEFAULT '{}'::uuid[],
   created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -215,8 +220,9 @@ CREATE POLICY "Authenticated users can create rooms"
   ON public.chat_rooms FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Room creator or admin can update room" ON public.chat_rooms;
-CREATE POLICY "Room creator or admin can update room" 
-  ON public.chat_rooms FOR UPDATE USING (auth.uid() = created_by OR public.is_admin());
+DROP POLICY IF EXISTS "Authenticated users can update room" ON public.chat_rooms;
+CREATE POLICY "Authenticated users can update room" 
+  ON public.chat_rooms FOR UPDATE USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Room creator or admin can delete room" ON public.chat_rooms;
 CREATE POLICY "Room creator or admin can delete room" 

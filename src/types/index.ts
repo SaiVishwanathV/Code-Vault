@@ -154,12 +154,16 @@ export interface ChatRoom {
   name: string;
   description: string;
   is_private: boolean;
+  room_code?: string;
   max_members?: number;
   created_by?: string;
+  creator_username?: string;
+  creator_name?: string;
   member_count: number;
   created_at: string;
   pinned_message_id?: string;
   invited_usernames?: string[];
+  joined_user_ids?: string[];
   last_message?: string;
   last_activity?: string;
   category?: 'algorithms' | 'interview' | 'daily' | 'study_group' | 'topic' | 'general';

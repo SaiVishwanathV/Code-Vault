@@ -8,6 +8,7 @@ import { RoomList } from '../components/community/RoomList';
 import { ChatWindow } from '../components/community/ChatWindow';
 import { CreateRoomModal } from '../components/community/CreateRoomModal';
 import { ShareProblemModal } from '../components/community/ShareProblemModal';
+import { triggerConfetti } from '../lib/utils';
 
 interface CommunityPageProps {
   problems: Problem[];
@@ -18,6 +19,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
   const { success, error: showError } = useToast();
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<ChatRoom[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,40 +28,82 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  // Load rooms
-  useEffect(() => {
-    const fetchRooms = async () => {
-      setLoading(true);
-      try {
-        const fetchedRooms = await chatService.getRooms(profile);
-        setRooms(fetchedRooms);
-        if (fetchedRooms.length > 0) {
-          if (!selectedRoomId || !fetchedRooms.some((r) => r.id === selectedRoomId)) {
-            setSelectedRoomId(fetchedRooms[0].id);
-          }
-        } else {
-          setSelectedRoomId('');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Load rooms and pending invitations
+  const fetchRoomsAndInvites = async () => {
+    setLoading(true);
+    try {
+      const [fetchedRooms, fetchedInvites] = await Promise.all([
+        chatService.getRooms(profile),
+        chatService.getPendingInvitations(profile),
+      ]);
 
-    fetchRooms();
+      setRooms(fetchedRooms);
+      setPendingInvitations(fetchedInvites);
+
+      if (fetchedRooms.length > 0) {
+        if (!selectedRoomId || !fetchedRooms.some((r) => r.id === selectedRoomId)) {
+          setSelectedRoomId(fetchedRooms[0].id);
+        }
+      } else {
+        setSelectedRoomId('');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRoomsAndInvites();
+
+    // Background sync for new rooms and invitations every 4 seconds
+    const inviteInterval = setInterval(() => {
+      if (profile) {
+        Promise.all([
+          chatService.getRooms(profile),
+          chatService.getPendingInvitations(profile),
+        ]).then(([r, inv]) => {
+          setRooms(r);
+          setPendingInvitations(inv);
+        });
+      }
+    }, 4000);
+
+    return () => clearInterval(inviteInterval);
   }, [profile]);
 
-  // Load messages for selected room
+  // Load and sync real-time messages for selected room
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!selectedRoomId) {
-        setMessages([]);
-        return;
-      }
-      const msgs = await chatService.getMessages(selectedRoomId);
-      setMessages(msgs);
-    };
+    if (!selectedRoomId) {
+      setMessages([]);
+      return;
+    }
 
-    fetchMessages();
+    // 1. Fetch initial messages
+    chatService.getMessages(selectedRoomId).then(setMessages);
+
+    // 2. Real-time WebSocket listener
+    const unsubscribe = chatService.subscribeToRoom(selectedRoomId, (newMsg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
+    });
+
+    // 3. Fast 2-second background sync to guarantee delivery across all devices/tabs
+    const msgInterval = setInterval(async () => {
+      const latest = await chatService.getMessages(selectedRoomId);
+      setMessages((prev) => {
+        if (latest.length !== prev.length || (latest.length > 0 && latest[latest.length - 1]?.id !== prev[prev.length - 1]?.id)) {
+          return latest;
+        }
+        return prev;
+      });
+    }, 2000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(msgInterval);
+    };
   }, [selectedRoomId]);
 
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
@@ -107,28 +151,70 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
     );
   };
 
-  const handleCreatePrivateRoom = async (data: {
+  const handleCreateRoom = async (data: {
     name: string;
     description: string;
+    isPrivate: boolean;
+    category: string;
     maxMembers: number;
     invitedUsernames: string[];
   }) => {
     if (!profile) return;
 
     try {
-      const newRoom = await chatService.createPrivateRoom(
+      const newRoom = await chatService.createRoom(
         data.name,
         data.description,
         profile,
+        data.isPrivate,
         data.maxMembers,
+        data.category,
         data.invitedUsernames
       );
       setRooms((prev) => [newRoom, ...prev]);
       setSelectedRoomId(newRoom.id);
       setIsCreateModalOpen(false);
-      success('Study Room Created', `"${newRoom.name}" is now ready!`);
+
+      if (newRoom.is_private) {
+        success(
+          'Private Study Room Created!',
+          `Invitations sent to ${data.invitedUsernames.map((u) => '@' + u).join(', ')} directly in their Community section.`
+        );
+      } else {
+        success('Open Room Launched!', `"${newRoom.name}" is now public for the community!`);
+      }
     } catch (err: any) {
       showError('Failed to Create Room', err.message);
+    }
+  };
+
+  const handleAcceptInvite = async (roomId: string) => {
+    if (!profile) return;
+
+    try {
+      const joinedRoom = await chatService.acceptRoomInvite(roomId, profile);
+      setRooms((prev) => {
+        const exists = prev.some((r) => r.id === joinedRoom.id);
+        return exists ? prev : [joinedRoom, ...prev];
+      });
+      setPendingInvitations((prev) => prev.filter((r) => r.id !== roomId));
+      setSelectedRoomId(joinedRoom.id);
+      triggerConfetti();
+      success('Welcome to the Study Room!', `Joined "${joinedRoom.name}"`);
+    } catch (err: any) {
+      showError('Accept Failed', err.message);
+    }
+  };
+
+  const handleDeclineInvite = async (roomId: string) => {
+    if (!profile) return;
+
+    try {
+      await chatService.declineRoomInvite(roomId, profile);
+      setPendingInvitations((prev) => prev.filter((r) => r.id !== roomId));
+      success('Invitation Removed');
+    } catch (err: any) {
+      showError('Decline Failed', err.message);
     }
   };
 
@@ -182,20 +268,23 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
             Community Study Rooms
           </h1>
           <p className="text-xs text-[#718096] dark:text-[#A0AEC0]">
-            Collaborate in study channels, share problem approaches, and discuss algorithms.
+            Collaborate in open public channels or join private study groups with invited peers.
           </p>
         </div>
       </div>
 
       {/* Main Split Interface */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 flex-1 min-h-0">
-        {/* Left: Room Selector */}
+        {/* Left: Room Selector with Direct In-App Invitations */}
         <div className="md:col-span-4 lg:col-span-4 h-full">
           <RoomList
             rooms={rooms}
+            pendingInvitations={pendingInvitations}
             selectedRoomId={selectedRoomId}
             onSelectRoom={setSelectedRoomId}
             onOpenCreateModal={() => setIsCreateModalOpen(true)}
+            onAcceptInvite={handleAcceptInvite}
+            onDeclineInvite={handleDeclineInvite}
           />
         </div>
 
@@ -223,28 +312,29 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
                 </h3>
                 <p className="text-xs text-[#718096] dark:text-[#A0AEC0] leading-relaxed">
                   {rooms.length === 0
-                    ? 'Start your first study channel to discuss DSA patterns and share solutions with peers.'
+                    ? 'Start an open channel for the community or invite peers to a private study group.'
                     : 'Choose a room from the left sidebar to start chatting.'}
                 </p>
               </div>
-              {rooms.length === 0 && (
+              <div className="pt-2">
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#E9B949] hover:bg-[#D4A32D] text-[#1A202C] font-bold text-xs shadow-sm transition-all"
                 >
                   <Plus className="w-4 h-4" /> Create First Room
                 </button>
-              )}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Create Private Room Modal */}
+      {/* Create Room Modal (Open vs Private with Direct User Selector) */}
       <CreateRoomModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onCreateRoom={handleCreatePrivateRoom}
+        currentUserId={profile?.id}
+        onCreateRoom={handleCreateRoom}
       />
 
       {/* Share Problem Modal */}

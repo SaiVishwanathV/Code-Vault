@@ -103,7 +103,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           <p className="text-xs text-[#718096] dark:text-[#A0AEC0] mt-0.5">{room.description}</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {room.is_private && room.room_code && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(room.room_code!);
+                setIsTyping(true);
+                setTimeout(() => setIsTyping(false), 2000);
+              }}
+              className="flex items-center gap-1.5 text-xs font-mono font-bold bg-[#FEF6E9] dark:bg-[#2C210C] text-[#8C5D0B] dark:text-[#E9B949] px-2.5 py-1 rounded-lg border border-[#F8E0B0] dark:border-[#5C4212] hover:brightness-95 transition-all shadow-subtle"
+              title="Click to copy Room Code and share with friends"
+            >
+              <span>🔑 Code: {room.room_code}</span>
+              <span className="text-[10px] text-[#A0AEC0]">{isTyping ? 'Copied!' : 'Copy'}</span>
+            </button>
+          )}
+
           <span className="hidden sm:flex items-center gap-1 text-xs text-[#718096] dark:text-[#A0AEC0] font-medium bg-[#FFF9EE] dark:bg-[#16181D] px-2.5 py-1 rounded-lg border border-[#EFE6D5] dark:border-[#2C323F]">
             <Users className="w-3.5 h-3.5 text-[#4F7A5A]" /> {room.member_count} members online
           </span>
