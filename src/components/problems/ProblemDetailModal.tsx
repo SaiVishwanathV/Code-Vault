@@ -236,21 +236,31 @@ export const ProblemDetailModal: React.FC<ProblemDetailModalProps> = ({
         {activeTab === 'complexity' && (
           <div className="space-y-3 animate-in fade-in duration-150 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-4 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE]/50 dark:bg-[#1E222B]/50">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#4F7A5A] block mb-1">
-                  Time Complexity
-                </span>
-                <p className="text-xs text-[#2D3748] dark:text-[#E2E8F0] leading-relaxed">
-                  Refer to the algorithm steps in Notes. Ensure your two-pointer or hash map approach operates within $O(N)$ or $O(N \log N)$ limits.
+              <div className="p-4 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE]/50 dark:bg-[#1E222B]/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#4F7A5A] block">
+                    Time Complexity
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#EBF3ED] dark:bg-[#16271A] text-[#4F7A5A] font-mono font-bold text-xs border border-[#C7DFC9] dark:border-[#254A2D]">
+                    {problem.time_complexity || 'Not Specified'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#718096] dark:text-[#A0AEC0] leading-relaxed">
+                  Asymptotic time required for optimal algorithm execution across input sizes.
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE]/50 dark:bg-[#1E222B]/50">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#B0831E] block mb-1">
-                  Auxiliary Space
-                </span>
-                <p className="text-xs text-[#2D3748] dark:text-[#E2E8F0] leading-relaxed">
-                  In-place pointer modifications reduce space to $O(1)$, while recursion stacks and frequency hash tables use $O(N)$ memory.
+              <div className="p-4 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE]/50 dark:bg-[#1E222B]/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#B0831E] block">
+                    Space Complexity
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#FEF6E9] dark:bg-[#2C210C] text-[#8C5D0B] dark:text-[#E9B949] font-mono font-bold text-xs border border-[#F8E0B0] dark:border-[#5C4212]">
+                    {problem.space_complexity || 'Not Specified'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#718096] dark:text-[#A0AEC0] leading-relaxed">
+                  Auxiliary memory allocated for data structures, recursion call stacks, or buffers.
                 </p>
               </div>
             </div>

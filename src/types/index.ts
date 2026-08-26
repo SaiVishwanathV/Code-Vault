@@ -20,6 +20,8 @@ export interface Problem {
   topic: string;
   problem_link?: string;
   notes?: string; // Central place for approaches, complexities, code snippets
+  time_complexity?: string; // e.g. "O(N)", "O(log N)"
+  space_complexity?: string; // e.g. "O(1)", "O(N)"
   solved_date: string; // YYYY-MM-DD
   time_taken?: number; // in minutes
   favorite: boolean;

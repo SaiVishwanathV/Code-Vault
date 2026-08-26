@@ -32,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenRegister,
   onToggleSidebar,
 }) => {
-  const { user, profile, signOut, isGuest } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,11 +174,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <p className="text-[11px] text-[#718096] dark:text-[#A0AEC0] truncate">
                         @{profile?.username || 'user'}
                       </p>
-                      {isGuest && (
-                        <span className="mt-1 inline-block text-[10px] px-2 py-0.5 rounded bg-[#FEF6E9] text-[#8C5D0B] border border-[#F8E0B0] font-semibold">
-                          Guest Demo Mode
-                        </span>
-                      )}
                     </div>
 
                     <div className="p-1 space-y-0.5 text-xs font-medium">

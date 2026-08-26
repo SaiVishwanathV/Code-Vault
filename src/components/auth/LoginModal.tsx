@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Mail, Lock, LogIn, Sparkles } from 'lucide-react';
+import { Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useAuth } from '../../context/AuthContext';
 
@@ -11,37 +11,38 @@ interface LoginModalProps {
   onForgotPassword: () => void;
 }
 
+interface LoginFormValues {
+  identifier: string;
+  password?: string;
+  rememberMe?: boolean;
+}
+
 export const LoginModal: React.FC<LoginModalProps> = ({
   isOpen,
   onClose,
   onSwitchToRegister,
   onForgotPassword,
 }) => {
-  const { signIn, startGuestSession } = useAuth();
+  const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<{ email: string; password?: string }>();
+  } = useForm<LoginFormValues>();
 
-  const onSubmit = async (data: { email: string; password?: string }) => {
+  const onSubmit = async (data: LoginFormValues) => {
     setLoading(true);
     try {
-      await signIn(data.email.trim(), data.password);
+      await signIn(data.identifier.trim(), data.password);
       onClose();
     } catch {
-      // Error toast handled in context
+      // Handled in AuthContext toast
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGuestLogin = () => {
-    startGuestSession();
-    onClose();
   };
 
   return (
@@ -49,32 +50,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="md"
-      title="Welcome to CodeVault – Coders Space"
-      description="Enter your credentials to access your solved problems, streaks, and community rooms"
+      title="Welcome Back to CodeVault"
+      description="Sign in with your email address or username to access your DSA tracker"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
-        {/* Email */}
+        {/* Email or Username */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
-            Email Address
+            Email Address or Username
           </label>
           <div className="relative">
             <Mail className="absolute left-3.5 top-3 w-4 h-4 text-[#A0AEC0]" />
             <input
-              type="email"
-              {...register('email', {
-                required: 'Email is required',
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Invalid email address',
-                },
+              type="text"
+              {...register('identifier', {
+                required: 'Please enter your email or username',
               })}
-              placeholder="alex@example.com"
+              placeholder="e.g. alex@example.com or @alex_codes"
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFFDF8] dark:bg-[#16181D] text-[#1A202C] dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
             />
           </div>
-          {errors.email && (
-            <p className="text-xs text-[#C54A53] mt-1">{errors.email.message}</p>
+          {errors.identifier && (
+            <p className="text-xs text-[#C54A53] mt-1">{errors.identifier.message}</p>
           )}
         </div>
 
@@ -90,33 +87,39 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 onClose();
                 onForgotPassword();
               }}
-              className="text-xs text-[#B0831E] dark:text-[#E9B949] hover:underline"
+              className="text-xs text-[#B0831E] dark:text-[#E9B949] hover:underline font-semibold"
             >
-              Forgot Password?
+              Forgot password?
             </button>
           </div>
           <div className="relative">
             <Lock className="absolute left-3.5 top-3 w-4 h-4 text-[#A0AEC0]" />
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               {...register('password', { required: 'Password is required' })}
               placeholder="••••••••"
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFFDF8] dark:bg-[#16181D] text-[#1A202C] dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFFDF8] dark:bg-[#16181D] text-[#1A202C] dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3.5 top-3 text-[#A0AEC0] hover:text-[#2D3748] dark:hover:text-white transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
           {errors.password && (
             <p className="text-xs text-[#C54A53] mt-1">{errors.password.message}</p>
           )}
         </div>
 
-        {/* Remember Me */}
+        {/* Remember me */}
         <div className="flex items-center">
           <input
             id="remember_me"
             type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            className="w-4 h-4 text-[#E9B949] rounded border-[#EFE6D5] dark:border-[#2C323F] focus:ring-[#E9B949]"
+            {...register('rememberMe')}
+            className="w-4 h-4 text-[#E9B949] rounded border-[#EFE6D5] dark:border-[#2C323F] focus:ring-[#E9B949] cursor-pointer"
           />
           <label htmlFor="remember_me" className="ml-2 text-xs text-[#718096]">
             Remember me on this device
@@ -132,18 +135,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           {loading ? 'Signing In...' : 'Sign In'}
           <LogIn className="w-4 h-4" />
         </button>
-
-        {/* Guest Demo shortcut */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={handleGuestLogin}
-            className="w-full py-2.5 px-4 rounded-xl border border-[#F8E0B0] dark:border-[#5C4212] bg-[#FFF9EE] dark:bg-[#2C210C] hover:bg-[#FEF6E9] text-[#8C5D0B] dark:text-[#E9B949] font-bold text-xs transition-all flex items-center justify-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            Try Instant Demo (Guest Mode)
-          </button>
-        </div>
 
         {/* Switch to Register */}
         <p className="text-center text-xs text-[#718096] pt-2 border-t border-[#EFE6D5] dark:border-[#2C323F]">

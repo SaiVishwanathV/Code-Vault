@@ -9,15 +9,15 @@ interface AuthContextType {
   user: any | null;
   profile: Profile | null;
   loading: boolean;
-  isGuest: boolean;
   isSupabaseConnected: boolean;
   signUp: (data: SignUpData) => Promise<any>;
   verifyOtp: (email: string, token: string) => Promise<any>;
   resendOtp: (email: string) => Promise<boolean>;
-  signIn: (email: string, password?: string) => Promise<any>;
+  signIn: (identifier: string, password?: string) => Promise<any>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
-  startGuestSession: () => void;
+  updatePassword: (newPassword: string) => Promise<boolean>;
+  deleteOwnAccount: () => Promise<void>;
   updateProfile: (data: Partial<Profile>) => Promise<Profile>;
   refreshProfile: () => Promise<void>;
 }
@@ -28,7 +28,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isGuest, setIsGuest] = useState(false);
   const { success, error: showError } = useToast();
 
   const isSupabaseConnected = isSupabaseConfigured();
@@ -65,17 +64,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               authService.clearSession();
               setUser(null);
               setProfile(null);
-              setIsGuest(false);
               showError('Account Suspended', 'Your account has been suspended by an administrator. Please contact code.v4ult@gmail.com for assistance.');
             } else {
               setUser(authUser);
               setProfile(prof);
-              setIsGuest(false);
             }
           } else {
             setUser(null);
             setProfile(null);
-            setIsGuest(false);
           }
 
           // Listen to auth changes
@@ -87,17 +83,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 authService.clearSession();
                 setUser(null);
                 setProfile(null);
-                setIsGuest(false);
                 showError('Account Suspended', 'Your account has been suspended by an administrator.');
               } else {
                 setUser(session.user);
                 setProfile(prof);
-                setIsGuest(false);
               }
             } else if (event === 'SIGNED_OUT') {
               setUser(null);
               setProfile(null);
-              setIsGuest(false);
             }
           });
 
@@ -107,7 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setUser(null);
           setProfile(null);
-          setIsGuest(false);
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
@@ -118,6 +110,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
   }, []);
+
+  // Real-time security guard: check if user account is deleted or suspended by admin
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured() || !supabase) return;
+
+    const channel = supabase
+      .channel(`profile_guard_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`,
+        },
+        async (payload: any) => {
+          if (payload.eventType === 'DELETE') {
+            await authService.signOut();
+            authService.clearSession();
+            setUser(null);
+            setProfile(null);
+            showError('Account Removed', 'Your account has been removed by the administrator.');
+          } else if (payload.new?.status === 'suspended') {
+            await authService.signOut();
+            authService.clearSession();
+            setUser(null);
+            setProfile(null);
+            showError('Account Suspended', 'Your account has been suspended by an administrator.');
+          } else if (payload.new) {
+            setProfile(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    // 5-second background sanity heartbeat
+    const interval = setInterval(async () => {
+      if (user?.id && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('status')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (error || !data) {
+            // User was removed by admin
+            await authService.signOut();
+            authService.clearSession();
+            setUser(null);
+            setProfile(null);
+            showError('Account Removed', 'Your account has been removed by the administrator.');
+          } else if (data.status === 'suspended') {
+            await authService.signOut();
+            authService.clearSession();
+            setUser(null);
+            setProfile(null);
+            showError('Account Suspended', 'Your account has been suspended by an administrator.');
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 5000);
+
+    return () => {
+      channel.unsubscribe();
+      clearInterval(interval);
+    };
+  }, [user?.id]);
 
   const signUp = async (data: SignUpData) => {
     try {
@@ -139,7 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (prof.status === 'suspended') {
         await authService.signOut();
         authService.clearSession();
-        throw new Error('This account has been suspended by an administrator. Please contact support.');
+        throw new Error('This account has been suspended by an administrator.');
       }
 
       setUser({ id: userId, email });
@@ -163,24 +225,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signIn = async (email: string, password?: string) => {
+  const signIn = async (identifier: string, password?: string) => {
     try {
-      const res = await authService.signIn(email, password);
+      const res = await authService.signIn(identifier, password);
       const userId = res.user?.id || `usr_${Date.now()}`;
       const prof = await profileService.getProfile(userId);
 
       if (prof.status === 'suspended') {
         await authService.signOut();
         authService.clearSession();
-        throw new Error('Your account has been suspended by an administrator. Please contact code.v4ult@gmail.com.');
+        throw new Error('Your account has been suspended by an administrator.');
       }
 
-      setUser({ id: userId, email });
+      setUser({ id: userId, email: prof.email || res.user?.email });
       setProfile(prof);
-      success('Welcome Back!', `Logged in as ${prof.full_name || email}`);
+      success('Welcome Back!', `Logged in as ${prof.full_name || prof.username}`);
       return res;
     } catch (err: any) {
-      showError('Login Failed', err.message || 'Invalid email or password.');
+      showError('Login Failed', err.message || 'Invalid credentials.');
       throw err;
     }
   };
@@ -191,7 +253,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authService.clearSession();
       setUser(null);
       setProfile(null);
-      setIsGuest(false);
       success('Logged Out', 'You have been signed out safely.');
     } catch (err: any) {
       showError('Sign Out Error', err.message);
@@ -209,8 +270,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const startGuestSession = () => {
-    // No-op to prevent unauthorized guest login
+  const updatePassword = async (newPassword: string) => {
+    try {
+      await authService.updatePassword(newPassword);
+      success('Password Updated', 'Your password has been changed successfully. You can now login.');
+      return true;
+    } catch (err: any) {
+      showError('Password Update Failed', err.message);
+      throw err;
+    }
+  };
+
+  const deleteOwnAccount = async () => {
+    try {
+      await authService.deleteOwnAccount();
+      setUser(null);
+      setProfile(null);
+      success('Account Deleted', 'Your account and all associated data have been permanently removed.');
+    } catch (err: any) {
+      showError('Delete Failed', err.message);
+      throw err;
+    }
   };
 
   const updateProfile = async (data: Partial<Profile>) => {
@@ -232,7 +312,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         loading,
-        isGuest,
         isSupabaseConnected,
         signUp,
         verifyOtp,
@@ -240,7 +319,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signIn,
         signOut,
         resetPassword,
-        startGuestSession,
+        updatePassword,
+        deleteOwnAccount,
         updateProfile,
         refreshProfile,
       }}

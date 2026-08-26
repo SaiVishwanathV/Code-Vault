@@ -41,10 +41,11 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 import { AboutPage } from './pages/AboutPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export function App() {
-  const { user, profile, updateProfile, isGuest } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const { success, error: showError } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -437,6 +438,12 @@ export function App() {
               }
             />
 
+            {/* Password Reset Page */}
+            <Route
+              path="/reset-password"
+              element={<ResetPasswordPage />}
+            />
+
             {/* Public About Page */}
             <Route
               path="/about"
@@ -449,8 +456,8 @@ export function App() {
         </main>
       </div>
 
-      {/* Global Footer */}
-      <Footer />
+      {/* Global Footer (Hidden on Community Chatroom to prevent input overlap) */}
+      {location.pathname !== '/community' && <Footer />}
 
       {/* Modals */}
       <AddEditProblemModal

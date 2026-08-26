@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS public.problems (
   topic TEXT NOT NULL,
   problem_link TEXT,
   notes TEXT,
+  time_complexity TEXT DEFAULT 'O(n)',
+  space_complexity TEXT DEFAULT 'O(1)',
   solved_date DATE DEFAULT CURRENT_DATE NOT NULL,
   time_taken INTEGER DEFAULT 0, -- in minutes
   favorite BOOLEAN DEFAULT FALSE,
@@ -435,4 +437,33 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_delete_user(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_user_status(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_user_role(UUID, TEXT) TO authenticated;
+
+-- ==============================================================================
+-- USER SELF DELETE FUNCTION
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.user_delete_own_account()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  current_user_id UUID := auth.uid();
+BEGIN
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required to delete account.';
+  END IF;
+
+  -- Delete from profiles (cascades all problems, streaks, chat messages, etc.)
+  DELETE FROM public.profiles WHERE id = current_user_id;
+
+  -- Delete from auth.users
+  DELETE FROM auth.users WHERE id = current_user_id;
+
+  RETURN TRUE;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.user_delete_own_account() TO authenticated;
+
 

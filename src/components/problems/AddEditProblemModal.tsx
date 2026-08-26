@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Link as LinkIcon, Clock, Calendar, Star, RefreshCw, Sparkles, BookOpen } from 'lucide-react';
+import { Link as LinkIcon, Clock, Calendar, Star, RefreshCw, Zap, Cpu } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Difficulty, Platform, Problem } from '../../types';
 import { DIFFICULTIES, PLATFORMS, TOPICS } from '../../lib/constants';
@@ -22,12 +22,17 @@ interface FormValues {
   topic: string;
   problem_link: string;
   notes: string;
+  time_complexity: string;
+  space_complexity: string;
   solved_date: string;
   time_taken: number;
   favorite: boolean;
   revision_needed: boolean;
   revision_date?: string;
 }
+
+const COMMON_TIME_COMPLEXITIES = ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)', 'O(n²)', 'O(2^n)'];
+const COMMON_SPACE_COMPLEXITIES = ['O(1)', 'O(log n)', 'O(n)', 'O(n²)'];
 
 export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
   isOpen,
@@ -42,6 +47,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
@@ -52,6 +58,8 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
       topic: 'Arrays',
       problem_link: '',
       notes: '',
+      time_complexity: 'O(n)',
+      space_complexity: 'O(1)',
       solved_date: format(new Date(), 'yyyy-MM-dd'),
       time_taken: 20,
       favorite: false,
@@ -62,6 +70,8 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
 
   const revisionNeeded = watch('revision_needed');
   const favorite = watch('favorite');
+  const currentTimeComplexity = watch('time_complexity');
+  const currentSpaceComplexity = watch('space_complexity');
 
   useEffect(() => {
     if (initialData) {
@@ -73,6 +83,8 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
         topic: initialData.topic || 'Arrays',
         problem_link: initialData.problem_link || '',
         notes: initialData.notes || '',
+        time_complexity: initialData.time_complexity || 'O(n)',
+        space_complexity: initialData.space_complexity || 'O(1)',
         solved_date: initialData.solved_date || format(new Date(), 'yyyy-MM-dd'),
         time_taken: initialData.time_taken || 20,
         favorite: initialData.favorite || false,
@@ -88,6 +100,8 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
         topic: 'Arrays',
         problem_link: '',
         notes: '',
+        time_complexity: 'O(n)',
+        space_complexity: 'O(1)',
         solved_date: format(new Date(), 'yyyy-MM-dd'),
         time_taken: 20,
         favorite: false,
@@ -111,14 +125,14 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
       onClose={onClose}
       maxWidth="2xl"
       title={isEditing ? 'Edit Problem Details' : 'Add Solved Problem'}
-      description={isEditing ? 'Update notes, platform, or revision details' : 'Log a newly conquered DSA problem and save your solution notes'}
+      description={isEditing ? 'Update complexities, platform, or notes' : 'Log a newly solved DSA problem with algorithm complexities and notes'}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
         {/* Row 1: Problem Name & ID */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
-              Problem Name <span className="text-rose-500">*</span>
+              Problem Name <span className="text-[#C54A53]">*</span>
             </label>
             <input
               type="text"
@@ -127,7 +141,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFFDF8] dark:bg-[#16181D] text-[#1A202C] dark:text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
             />
             {errors.problem_name && (
-              <p className="text-xs text-rose-500 mt-1">{errors.problem_name.message}</p>
+              <p className="text-xs text-[#C54A53] mt-1">{errors.problem_name.message}</p>
             )}
           </div>
 
@@ -148,7 +162,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
-              Platform <span className="text-rose-500">*</span>
+              Platform <span className="text-[#C54A53]">*</span>
             </label>
             <select
               {...register('platform', { required: true })}
@@ -164,7 +178,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
-              Difficulty <span className="text-rose-500">*</span>
+              Difficulty <span className="text-[#C54A53]">*</span>
             </label>
             <select
               {...register('difficulty', { required: true })}
@@ -180,7 +194,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
-              Topic <span className="text-rose-500">*</span>
+              Topic <span className="text-[#C54A53]">*</span>
             </label>
             <select
               {...register('topic', { required: true })}
@@ -195,7 +209,80 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
           </div>
         </div>
 
-        {/* Row 3: Problem URL Only (No GitHub/Solution link) */}
+        {/* Row 3: Time Complexity & Space Complexity (Required) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-[#FFF9EE]/50 dark:bg-[#1E222B]/50 border border-[#EFE6D5] dark:border-[#2C323F]">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-[#B0831E] dark:text-[#E9B949]" />
+                Time Complexity <span className="text-[#C54A53]">*</span>
+              </label>
+            </div>
+            <input
+              type="text"
+              {...register('time_complexity', { required: 'Time complexity is required' })}
+              placeholder="e.g. O(n), O(log n)"
+              className="w-full px-3 py-2 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-white dark:bg-[#16181D] text-[#1A202C] dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
+            />
+            {/* Quick Chips */}
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {COMMON_TIME_COMPLEXITIES.map((tc) => (
+                <button
+                  type="button"
+                  key={tc}
+                  onClick={() => setValue('time_complexity', tc)}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                    currentTimeComplexity === tc
+                      ? 'bg-[#E9B949] text-[#1A202C] font-bold border-[#D4A32D]'
+                      : 'bg-white dark:bg-[#16181D] border-[#EFE6D5] dark:border-[#2C323F] text-[#718096] hover:text-[#1A202C]'
+                  }`}
+                >
+                  {tc}
+                </button>
+              ))}
+            </div>
+            {errors.time_complexity && (
+              <p className="text-xs text-[#C54A53] mt-1">{errors.time_complexity.message}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] flex items-center gap-1">
+                <Cpu className="w-3.5 h-3.5 text-[#4F7A5A]" />
+                Space Complexity <span className="text-[#C54A53]">*</span>
+              </label>
+            </div>
+            <input
+              type="text"
+              {...register('space_complexity', { required: 'Space complexity is required' })}
+              placeholder="e.g. O(1), O(n)"
+              className="w-full px-3 py-2 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-white dark:bg-[#16181D] text-[#1A202C] dark:text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#E9B949]"
+            />
+            {/* Quick Chips */}
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {COMMON_SPACE_COMPLEXITIES.map((sc) => (
+                <button
+                  type="button"
+                  key={sc}
+                  onClick={() => setValue('space_complexity', sc)}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                    currentSpaceComplexity === sc
+                      ? 'bg-[#4F7A5A] text-white font-bold border-[#3D6346]'
+                      : 'bg-white dark:bg-[#16181D] border-[#EFE6D5] dark:border-[#2C323F] text-[#718096] hover:text-[#1A202C]'
+                  }`}
+                >
+                  {sc}
+                </button>
+              ))}
+            </div>
+            {errors.space_complexity && (
+              <p className="text-xs text-[#C54A53] mt-1">{errors.space_complexity.message}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Row 4: Problem URL */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
             Problem URL
@@ -212,11 +299,11 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
             />
           </div>
           {errors.problem_link && (
-            <p className="text-xs text-rose-500 mt-1">{errors.problem_link.message}</p>
+            <p className="text-xs text-[#C54A53] mt-1">{errors.problem_link.message}</p>
           )}
         </div>
 
-        {/* Row 4: Solved Date & Time Taken */}
+        {/* Row 5: Solved Date & Time Taken */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#4A5568] dark:text-[#A0AEC0] mb-1.5">
@@ -257,13 +344,13 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
               Personal Notes & Code Walkthrough (Markdown)
             </label>
             <span className="text-[11px] text-[#718096] dark:text-[#A0AEC0]">
-              Save intuition, code snippets & $O(N)$ complexities here
+              Intuition, templates, and approach
             </span>
           </div>
           <textarea
-            rows={5}
+            rows={4}
             {...register('notes')}
-            placeholder="### Core Intuition&#10;Describe your solution steps here...&#10;&#10;```cpp&#10;// Code snippet&#10;int solve() { ... }&#10;```&#10;&#10;- Time: O(N)&#10;- Space: O(1)"
+            placeholder="### Core Intuition&#10;Describe your solution steps here...&#10;&#10;```cpp&#10;// Code snippet&#10;int solve() { ... }&#10;```"
             className="w-full px-3.5 py-2.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFFDF8] dark:bg-[#16181D] text-[#1A202C] dark:text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#E9B949] leading-relaxed"
           />
         </div>
@@ -292,7 +379,7 @@ export const AddEditProblemModal: React.FC<AddEditProblemModalProps> = ({
                   Add to Revision Queue
                 </span>
                 <span className="text-[11px] text-[#718096] dark:text-[#A0AEC0]">
-                  Queue for spaced repetition review before placements
+                  Queue for spaced repetition review before interviews
                 </span>
               </div>
             </div>
