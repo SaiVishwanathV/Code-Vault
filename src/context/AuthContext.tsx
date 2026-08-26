@@ -57,13 +57,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setProfile(prof);
             setIsGuest(false);
           } else {
-            // Check local demo profile
-            const localProf = authService.getCurrentStoredUser();
-            if (localProf) {
-              setUser({ id: localProf.id, email: localProf.email });
-              setProfile(localProf);
-              setIsGuest(localProf.id.startsWith('mock-'));
-            }
+            setUser(null);
+            setProfile(null);
+            setIsGuest(false);
           }
 
           // Listen to auth changes
@@ -76,6 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (event === 'SIGNED_OUT') {
               setUser(null);
               setProfile(null);
+              setIsGuest(false);
             }
           });
 
@@ -83,13 +80,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             authListener.subscription.unsubscribe();
           };
         } else {
-          // Pure local storage mode
-          const localProf = authService.getCurrentStoredUser();
-          if (localProf) {
-            setUser({ id: localProf.id, email: localProf.email });
-            setProfile(localProf);
-            setIsGuest(true);
-          }
+          setUser(null);
+          setProfile(null);
+          setIsGuest(false);
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
@@ -156,6 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       await authService.signOut();
+      authService.clearSession();
       setUser(null);
       setProfile(null);
       setIsGuest(false);
@@ -177,11 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const startGuestSession = () => {
-    const guestProf = authService.startGuestSession();
-    setUser({ id: guestProf.id, email: guestProf.email });
-    setProfile(guestProf);
-    setIsGuest(true);
-    success('Demo Mode Active', 'Exploring CodeTracker Pro as guest with pre-populated DSA records.');
+    // No-op to prevent unauthorized guest login
   };
 
   const updateProfile = async (data: Partial<Profile>) => {

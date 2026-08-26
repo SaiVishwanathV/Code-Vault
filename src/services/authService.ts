@@ -197,24 +197,31 @@ export const authService = {
   },
 
   /**
-   * Get current stored profile
+   * Get current stored profile (real profile only)
    */
   getCurrentStoredUser(): Profile | null {
     const raw = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed && !parsed.id?.startsWith('mock-')) {
+        return parsed;
+      }
+      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+      return null;
     } catch {
+      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
       return null;
     }
   },
 
   /**
-   * Start guest session with realistic sample data
+   * Clear session
    */
-  startGuestSession(): Profile {
-    localStorage.setItem(LOCAL_STORAGE_GUEST_KEY, 'true');
-    localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(INITIAL_MOCK_PROFILE));
-    return INITIAL_MOCK_PROFILE;
+  clearSession() {
+    localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_GUEST_KEY);
+    localStorage.removeItem(PENDING_OTP_EMAIL_KEY);
+    localStorage.removeItem(PENDING_OTP_DATA_KEY);
   },
 };

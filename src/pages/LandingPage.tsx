@@ -19,14 +19,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenLogin,
   onOpenRegister,
 }) => {
-  const { startGuestSession } = useAuth();
-  const navigate = useNavigate();
-
-  const handleStartLearning = () => {
-    startGuestSession();
-    navigate('/dashboard');
-  };
-
   const threeFeatures = [
     {
       icon: Code2,
@@ -95,10 +87,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           className="flex flex-wrap items-center justify-center gap-3.5 pt-2"
         >
           <button
-            onClick={handleStartLearning}
+            onClick={onOpenRegister}
             className="px-7 py-3.5 rounded-xl bg-[#E9B949] hover:bg-[#D4A32D] text-[#1A202C] font-bold text-sm shadow-sm transition-all flex items-center gap-2 active:scale-[0.98]"
           >
-            Start Learning <ArrowRight className="w-4 h-4" />
+            Get Started <ArrowRight className="w-4 h-4" />
           </button>
 
           <button
