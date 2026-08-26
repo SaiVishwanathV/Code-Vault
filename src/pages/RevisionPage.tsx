@@ -1,8 +1,9 @@
 import React from 'react';
-import { RefreshCw, CheckCircle2, Bookmark, Calendar } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Problem } from '../types';
 import { RevisionCard } from '../components/revision/RevisionCard';
 import { EmptyState } from '../components/common/EmptyState';
+import { format } from 'date-fns';
 
 interface RevisionPageProps {
   problems: Problem[];
@@ -18,7 +19,24 @@ export const RevisionPage: React.FC<RevisionPageProps> = ({
   onSelectProblem,
   onNavigateToProblems,
 }) => {
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
   const revisionProblems = problems.filter((p) => p.revision_needed);
+
+  // Sort overdue revisions to the top, then sort by revision date ascending
+  const sortedRevisionProblems = [...revisionProblems].sort((a, b) => {
+    const aDate = a.revision_date || '9999-99-99';
+    const bDate = b.revision_date || '9999-99-99';
+    const aOverdue = aDate < todayStr;
+    const bOverdue = bDate < todayStr;
+
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    return aDate.localeCompare(bDate);
+  });
+
+  const overdueCount = revisionProblems.filter(
+    (p) => p.revision_date && p.revision_date < todayStr
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -34,7 +52,13 @@ export const RevisionPage: React.FC<RevisionPageProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {overdueCount > 0 && (
+            <span className="px-3 py-1.5 rounded-xl bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-900 text-xs font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {overdueCount} Overdue
+            </span>
+          )}
           <span className="px-3.5 py-1.5 rounded-xl bg-[#FEF6E9] dark:bg-[#2C210C] text-[#8C5D0B] dark:text-[#E9B949] border border-[#F8E0B0] dark:border-[#5C4212] text-xs font-bold">
             {revisionProblems.length} Problem{revisionProblems.length !== 1 ? 's' : ''} in Queue
           </span>
@@ -42,7 +66,7 @@ export const RevisionPage: React.FC<RevisionPageProps> = ({
       </div>
 
       {/* Grid of Revision Cards */}
-      {revisionProblems.length === 0 ? (
+      {sortedRevisionProblems.length === 0 ? (
         <EmptyState
           icon={<CheckCircle2 className="w-7 h-7 text-[#4F7A5A]" />}
           title="All Caught Up on Revisions!"
@@ -52,7 +76,7 @@ export const RevisionPage: React.FC<RevisionPageProps> = ({
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {revisionProblems.map((prob) => (
+          {sortedRevisionProblems.map((prob) => (
             <RevisionCard
               key={prob.id}
               problem={prob}

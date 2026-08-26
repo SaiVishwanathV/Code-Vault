@@ -71,13 +71,18 @@ export const AdminPage: React.FC = () => {
 
   // User Actions
   const handleToggleStatus = async (user: LeaderboardEntry) => {
+    if (user.id === profile?.id) {
+      showError('Action Prohibited', 'You cannot suspend your own administrator account.');
+      return;
+    }
     const nextStatus = user.status === 'active' ? 'suspended' : 'active';
     try {
       await adminService.updateUserStatus(user.id, nextStatus);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, status: nextStatus } : u))
-      );
-      const newStats = await adminService.getAdminStats();
+      const [freshUsers, newStats] = await Promise.all([
+        adminService.getAllUsers(),
+        adminService.getAdminStats(),
+      ]);
+      setUsers(freshUsers);
       setStats(newStats);
       success(
         nextStatus === 'suspended' ? 'User Suspended' : 'User Reactivated',
@@ -89,12 +94,15 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleToggleRole = async (user: LeaderboardEntry) => {
+    if (user.id === profile?.id) {
+      showError('Action Prohibited', 'You cannot demote your own administrator account.');
+      return;
+    }
     const nextRole = user.role === 'admin' ? 'user' : 'admin';
     try {
       await adminService.updateUserRole(user.id, nextRole);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, role: nextRole } : u))
-      );
+      const freshUsers = await adminService.getAllUsers();
+      setUsers(freshUsers);
       success('Role Updated', `@${user.username} is now a ${nextRole}.`);
     } catch (err: any) {
       showError('Action Failed', err.message);
@@ -102,11 +110,18 @@ export const AdminPage: React.FC = () => {
   };
 
   const handleDeleteUser = async (userId: string, username: string) => {
+    if (userId === profile?.id) {
+      showError('Action Prohibited', 'You cannot delete your own administrator account.');
+      return;
+    }
     if (!window.confirm(`Are you sure you want to permanently delete @${username} and all their records?`)) return;
     try {
       await adminService.deleteUser(userId);
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-      const newStats = await adminService.getAdminStats();
+      const [freshUsers, newStats] = await Promise.all([
+        adminService.getAllUsers(),
+        adminService.getAdminStats(),
+      ]);
+      setUsers(freshUsers);
       setStats(newStats);
       success('User Deleted', `@${username} permanently removed from database.`);
     } catch (err: any) {
@@ -369,35 +384,41 @@ export const AdminPage: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleToggleStatus(u)}
-                            className={`p-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                              u.status === 'active'
-                                ? 'border-[#F8D2D5] text-[#C54A53] hover:bg-[#FDF2F3]'
-                                : 'border-[#C7DFC9] text-[#4F7A5A] hover:bg-[#EBF3ED]'
-                            }`}
-                            title={u.status === 'active' ? 'Suspend User' : 'Reactivate User'}
-                          >
-                            {u.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                          </button>
+                        {u.id === profile?.id ? (
+                          <span className="text-[10px] font-bold text-[#8C5D0B] dark:text-[#E9B949] bg-[#FEF6E9] dark:bg-[#2C210C] px-2.5 py-1 rounded-lg border border-[#F8E0B0] dark:border-[#5C4212]">
+                            You (Admin)
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleToggleStatus(u)}
+                              className={`p-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                                u.status === 'active'
+                                  ? 'border-[#F8D2D5] text-[#C54A53] hover:bg-[#FDF2F3]'
+                                  : 'border-[#C7DFC9] text-[#4F7A5A] hover:bg-[#EBF3ED]'
+                              }`}
+                              title={u.status === 'active' ? 'Suspend User' : 'Reactivate User'}
+                            >
+                              {u.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                            </button>
 
-                          <button
-                            onClick={() => handleToggleRole(u)}
-                            className="p-1.5 rounded-lg border border-[#EFE6D5] dark:border-[#2C323F] text-[#718096] hover:text-[#1A202C] hover:bg-[#FFF9EE]"
-                            title={u.role === 'admin' ? 'Demote to User' : 'Promote to Admin'}
-                          >
-                            <Crown className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              onClick={() => handleToggleRole(u)}
+                              className="p-1.5 rounded-lg border border-[#EFE6D5] dark:border-[#2C323F] text-[#718096] hover:text-[#1A202C] hover:bg-[#FFF9EE]"
+                              title={u.role === 'admin' ? 'Demote to User' : 'Promote to Admin'}
+                            >
+                              <Crown className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            onClick={() => handleDeleteUser(u.id, u.username)}
-                            className="p-1.5 rounded-lg border border-[#F8D2D5] text-[#C54A53] hover:bg-[#FDF2F3]"
-                            title="Delete User"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                            <button
+                              onClick={() => handleDeleteUser(u.id, u.username)}
+                              className="p-1.5 rounded-lg border border-[#F8D2D5] text-[#C54A53] hover:bg-[#FDF2F3]"
+                              title="Delete User"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

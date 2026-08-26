@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, Calendar, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { RefreshCw, Calendar, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Problem } from '../../types';
 import { DifficultyBadge, PlatformBadge, TopicBadge } from '../common/Badge';
 import { formatDate } from '../../lib/utils';
@@ -20,6 +20,9 @@ export const RevisionCard: React.FC<RevisionCardProps> = ({
   const [nextDate, setNextDate] = useState(format(new Date(Date.now() + 7 * 86400000), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(false);
 
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const isOverdue = Boolean(problem.revision_date && problem.revision_date < todayStr);
+
   const handleMarkDone = async (scheduleNext: boolean) => {
     setLoading(true);
     try {
@@ -33,25 +36,36 @@ export const RevisionCard: React.FC<RevisionCardProps> = ({
   return (
     <div
       onClick={() => onSelectProblem(problem)}
-      className="p-5 rounded-[18px] border border-[#EFE6D5] dark:border-[#2C323F] bg-white dark:bg-[#1E222B] hover:border-[#E9B949] shadow-card transition-all flex flex-col justify-between group cursor-pointer"
+      className={`p-5 rounded-[18px] border shadow-card transition-all flex flex-col justify-between group cursor-pointer ${
+        isOverdue
+          ? 'border-red-300 dark:border-red-900/80 bg-[#FFF5F5] dark:bg-[#201214] hover:border-red-400'
+          : 'border-[#EFE6D5] dark:border-[#2C323F] bg-white dark:bg-[#1E222B] hover:border-[#E9B949]'
+      }`}
     >
       <div>
-        {/* Header: Badges & Revision Counter */}
+        {/* Header: Badges, Overdue Alert & Revision Counter */}
         <div className="flex items-center justify-between gap-2 mb-2.5">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-mono text-xs font-bold text-[#718096]">
               {problem.problem_id}
             </span>
             <PlatformBadge platform={problem.platform} />
             <DifficultyBadge difficulty={problem.difficulty} />
+            {isOverdue && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-900 flex items-center gap-1 animate-pulse">
+                <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400" /> Overdue
+              </span>
+            )}
           </div>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF6E9] dark:bg-[#2C210C] text-[#8C5D0B] dark:text-[#E9B949] border border-[#F8E0B0] dark:border-[#5C4212] flex items-center gap-1">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF6E9] dark:bg-[#2C210C] text-[#8C5D0B] dark:text-[#E9B949] border border-[#F8E0B0] dark:border-[#5C4212] flex items-center gap-1 shrink-0">
             <RefreshCw className="w-3 h-3" /> {problem.revision_count || 0}x
           </span>
         </div>
 
         {/* Title */}
-        <h3 className="text-base font-bold text-[#1A202C] dark:text-white group-hover:text-[#B0831E] transition-colors">
+        <h3 className={`text-base font-bold transition-colors ${
+          isOverdue ? 'text-red-900 dark:text-red-200 group-hover:text-red-600' : 'text-[#1A202C] dark:text-white group-hover:text-[#B0831E]'
+        }`}>
           {problem.problem_name}
         </h3>
 
@@ -59,7 +73,13 @@ export const RevisionCard: React.FC<RevisionCardProps> = ({
         <div className="flex flex-wrap items-center gap-2 text-xs text-[#718096] dark:text-[#A0AEC0] mt-2">
           <TopicBadge topic={problem.topic} />
           {problem.revision_date && (
-            <span className="flex items-center gap-1 text-[#C0841D] font-semibold text-[11px]">
+            <span
+              className={`flex items-center gap-1 font-semibold text-[11px] ${
+                isOverdue
+                  ? 'text-red-600 dark:text-red-400 font-bold'
+                  : 'text-[#C0841D] dark:text-[#E9B949]'
+              }`}
+            >
               <Calendar className="w-3.5 h-3.5" /> Due: {formatDate(problem.revision_date)}
             </span>
           )}
@@ -73,7 +93,9 @@ export const RevisionCard: React.FC<RevisionCardProps> = ({
 
       {/* Action Footer */}
       <div
-        className="pt-3.5 mt-3.5 border-t border-[#EFE6D5] dark:border-[#2C323F] space-y-2"
+        className={`pt-3.5 mt-3.5 border-t space-y-2 ${
+          isOverdue ? 'border-red-200 dark:border-red-900/50' : 'border-[#EFE6D5] dark:border-[#2C323F]'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {isRescheduling ? (
@@ -108,7 +130,9 @@ export const RevisionCard: React.FC<RevisionCardProps> = ({
             <button
               onClick={() => handleMarkDone(false)}
               disabled={loading}
-              className="flex-1 py-2 px-3 rounded-xl bg-[#4F7A5A] hover:bg-[#3D6346] text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+              className={`flex-1 py-2 px-3 rounded-xl text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 ${
+                isOverdue ? 'bg-red-600 hover:bg-red-700' : 'bg-[#4F7A5A] hover:bg-[#3D6346]'
+              }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" /> Mark Revised
             </button>

@@ -84,13 +84,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {user ? (
           <button
             onClick={onOpenSearch}
-            className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE] dark:bg-[#1E222B] hover:border-[#D4A32D] text-xs text-[#718096] dark:text-[#A0AEC0] w-64 transition-all shadow-subtle"
+            className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border border-[#EFE6D5] dark:border-[#2C323F] bg-[#FFF9EE] dark:bg-[#1E222B] hover:border-[#D4A32D] text-xs text-[#718096] dark:text-[#A0AEC0] w-64 transition-all shadow-subtle text-left"
           >
-            <Search className="w-4 h-4 text-[#A0AEC0]" />
+            <Search className="w-4 h-4 text-[#A0AEC0] shrink-0" />
             <span className="truncate">Search problems or notes...</span>
-            <kbd className="ml-auto px-1.5 py-0.5 text-[10px] font-mono bg-white dark:bg-[#16181D] border border-[#EFE6D5] dark:border-[#2C323F] rounded text-[#718096]">
-              ⌘K
-            </kbd>
           </button>
         ) : (
           <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-[#4A5568] dark:text-[#CBD5E0]">
