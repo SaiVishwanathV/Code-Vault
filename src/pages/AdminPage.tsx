@@ -77,9 +77,11 @@ export const AdminPage: React.FC = () => {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, status: nextStatus } : u))
       );
+      const newStats = await adminService.getAdminStats();
+      setStats(newStats);
       success(
         nextStatus === 'suspended' ? 'User Suspended' : 'User Reactivated',
-        `${user.username} account status updated.`
+        `@${user.username} account status updated to ${nextStatus}.`
       );
     } catch (err: any) {
       showError('Action Failed', err.message);
@@ -93,18 +95,20 @@ export const AdminPage: React.FC = () => {
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, role: nextRole } : u))
       );
-      success('Role Updated', `${user.username} is now a ${nextRole}.`);
+      success('Role Updated', `@${user.username} is now a ${nextRole}.`);
     } catch (err: any) {
       showError('Action Failed', err.message);
     }
   };
 
   const handleDeleteUser = async (userId: string, username: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete @${username}?`)) return;
+    if (!window.confirm(`Are you sure you want to permanently delete @${username} and all their records?`)) return;
     try {
       await adminService.deleteUser(userId);
       setUsers((prev) => prev.filter((u) => u.id !== userId));
-      success('User Deleted', `@${username} removed from database.`);
+      const newStats = await adminService.getAdminStats();
+      setStats(newStats);
+      success('User Deleted', `@${username} permanently removed from database.`);
     } catch (err: any) {
       showError('Delete Failed', err.message);
     }

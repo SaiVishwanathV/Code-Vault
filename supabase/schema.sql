@@ -126,9 +126,12 @@ CREATE INDEX IF NOT EXISTS idx_announcements_active ON public.announcements(is_a
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
+  RETURN (
+    lower(COALESCE(auth.jwt() ->> 'email', '')) IN ('code.v4ult@gmail.com', 'admin@codevault.dev')
+    OR EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -341,3 +344,95 @@ DROP TRIGGER IF EXISTS update_problems_updated_at ON public.problems;
 CREATE TRIGGER update_problems_updated_at
   BEFORE UPDATE ON public.problems
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ==============================================================================
+-- SECURE ADMIN BACKEND FUNCTIONS (RPCs)
+-- ==============================================================================
+
+-- 1. Permanently delete a user from public.profiles and auth.users
+CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Access denied. Only administrators can delete users.';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot delete your own active administrator account.';
+  END IF;
+
+  -- Delete from profiles (cascades to problems, streaks, chat messages, rooms)
+  DELETE FROM public.profiles WHERE id = target_user_id;
+
+  -- Delete from auth.users so login is permanently revoked
+  DELETE FROM auth.users WHERE id = target_user_id;
+
+  RETURN TRUE;
+END;
+$$;
+
+-- 2. Suspend or reactivate user account
+CREATE OR REPLACE FUNCTION public.admin_update_user_status(target_user_id UUID, new_status TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Access denied. Only administrators can change account status.';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot suspend your own administrator account.';
+  END IF;
+
+  IF new_status NOT IN ('active', 'suspended') THEN
+    RAISE EXCEPTION 'Invalid status value.';
+  END IF;
+
+  UPDATE public.profiles 
+  SET status = new_status, updated_at = now()
+  WHERE id = target_user_id;
+
+  RETURN TRUE;
+END;
+$$;
+
+-- 3. Promote or demote user role (admin / user)
+CREATE OR REPLACE FUNCTION public.admin_update_user_role(target_user_id UUID, new_role TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Access denied. Only administrators can modify user roles.';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot demote your own administrator account.';
+  END IF;
+
+  IF new_role NOT IN ('user', 'admin') THEN
+    RAISE EXCEPTION 'Invalid role value.';
+  END IF;
+
+  UPDATE public.profiles 
+  SET role = new_role, updated_at = now()
+  WHERE id = target_user_id;
+
+  RETURN TRUE;
+END;
+$$;
+
+-- Grant execute permissions to authenticated users (functions enforce is_admin internally)
+GRANT EXECUTE ON FUNCTION public.admin_delete_user(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_user_status(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_user_role(UUID, TEXT) TO authenticated;
+

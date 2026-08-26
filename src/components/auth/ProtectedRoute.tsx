@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation, Link } from 'react-router-dom';
-import { Lock, ShieldAlert, Home, LogIn } from 'lucide-react';
+import { Lock, ShieldAlert, Home, LogIn, UserX } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface ProtectedRouteProps {
@@ -14,7 +14,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   requireAdmin = false,
   onOpenLogin,
 }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -57,6 +57,35 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
             <Home className="w-4 h-4" /> Return Home
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  // Suspended account check
+  if (profile?.status === 'suspended') {
+    return (
+      <div className="min-h-[65vh] flex flex-col items-center justify-center text-center p-6 space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-[#FDF2F3] dark:bg-[#2E1416] text-[#C54A53] border border-[#F8D2D5] dark:border-[#521C20] flex items-center justify-center mx-auto shadow-sm">
+          <UserX className="w-7 h-7" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-[#1A202C] dark:text-white tracking-tight">
+            Account Suspended
+          </h2>
+          <p className="text-xs sm:text-sm text-[#718096] dark:text-[#A0AEC0] max-w-md">
+            Your account has been suspended by an administrator. Please contact support at{' '}
+            <a href="mailto:code.v4ult@gmail.com" className="text-[#E9B949] underline font-bold">
+              code.v4ult@gmail.com
+            </a>{' '}
+            for assistance.
+          </p>
+        </div>
+        <button
+          onClick={() => signOut()}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C54A53] hover:bg-[#A83840] text-white text-xs font-bold shadow-sm transition-all"
+        >
+          Sign Out
+        </button>
       </div>
     );
   }

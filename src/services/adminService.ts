@@ -2,24 +2,6 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { AdminStats, ChatRoom, LeaderboardEntry, Profile } from '../types';
 import { chatService } from './chatService';
 
-const USERS_STORAGE_KEY = 'codevault_admin_users_v2';
-
-function getStoredUsers(): LeaderboardEntry[] {
-  const raw = localStorage.getItem(USERS_STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredUsers(users: LeaderboardEntry[]) {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-}
-
 export const adminService = {
   /**
    * Fetch aggregated platform statistics strictly from real database records
@@ -55,14 +37,11 @@ export const adminService = {
       }
     }
 
-    const users = getStoredUsers();
-    const totalProblemsSolved = users.reduce((acc, u) => acc + (u.total_solved || 0), 0);
-
     return {
-      totalUsers: users.length,
-      activeUsers: users.filter((u) => u.status === 'active').length,
-      totalProblemsSolved,
-      newUsersThisWeek: users.length,
+      totalUsers: 0,
+      activeUsers: 0,
+      totalProblemsSolved: 0,
+      newUsersThisWeek: 0,
       activeRooms: 0,
     };
   },
@@ -125,43 +104,103 @@ export const adminService = {
         console.error('Failed to fetch users in adminService:', err);
       }
     }
-    return getStoredUsers();
+    return [];
   },
 
   /**
-   * Suspend or Reactivate a user account
+   * Suspend or Reactivate a user account in Supabase
    */
   async updateUserStatus(userId: string, status: 'active' | 'suspended'): Promise<void> {
     if (isSupabaseConfigured() && supabase) {
-      await supabase.from('profiles').update({ status }).eq('id', userId);
+      try {
+        // 1. Try secure RPC function
+        const { error: rpcError } = await supabase.rpc('admin_update_user_status', {
+          target_user_id: userId,
+          new_status: status,
+        });
+
+        if (rpcError) {
+          // 2. Direct table update fallback
+          const { error: tableError } = await supabase
+            .from('profiles')
+            .update({ status, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+          if (tableError) {
+            throw new Error(tableError.message || 'Failed to update user status in database');
+          }
+        }
+
+        // Invalidate cached profile if present
+        localStorage.removeItem(`codevault_profile_${userId}`);
+      } catch (err: any) {
+        throw new Error(err.message || 'Failed to update user account status.');
+      }
     }
-    const users = getStoredUsers();
-    const updated = users.map((u) => (u.id === userId ? { ...u, status } : u));
-    saveStoredUsers(updated);
   },
 
   /**
-   * Promote or Demote user to Admin
+   * Promote or Demote user to Admin in Supabase
    */
   async updateUserRole(userId: string, role: 'user' | 'admin'): Promise<void> {
     if (isSupabaseConfigured() && supabase) {
-      await supabase.from('profiles').update({ role }).eq('id', userId);
+      try {
+        // 1. Try secure RPC function
+        const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
+          target_user_id: userId,
+          new_role: role,
+        });
+
+        if (rpcError) {
+          // 2. Direct table update fallback
+          const { error: tableError } = await supabase
+            .from('profiles')
+            .update({ role, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+          if (tableError) {
+            throw new Error(tableError.message || 'Failed to update user role in database');
+          }
+        }
+
+        // Invalidate cached profile if present
+        localStorage.removeItem(`codevault_profile_${userId}`);
+      } catch (err: any) {
+        throw new Error(err.message || 'Failed to update user role.');
+      }
     }
-    const users = getStoredUsers();
-    const updated = users.map((u) => (u.id === userId ? { ...u, role } : u));
-    saveStoredUsers(updated);
   },
 
   /**
-   * Delete a user profile completely
+   * Delete a user profile and auth account completely from Supabase
    */
   async deleteUser(userId: string): Promise<void> {
     if (isSupabaseConfigured() && supabase) {
-      await supabase.from('profiles').delete().eq('id', userId);
+      try {
+        // 1. Try secure RPC function
+        const { error: rpcError } = await supabase.rpc('admin_delete_user', {
+          target_user_id: userId,
+        });
+
+        if (rpcError) {
+          // 2. Direct table deletion fallback
+          const { error: tableError } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+
+          if (tableError) {
+            throw new Error(tableError.message || 'Failed to delete user profile from database');
+          }
+        }
+
+        // Clean local cache
+        localStorage.removeItem(`codevault_profile_${userId}`);
+        localStorage.removeItem(`codevault_problems_${userId}`);
+      } catch (err: any) {
+        throw new Error(err.message || 'Failed to delete user.');
+      }
     }
-    const users = getStoredUsers();
-    const updated = users.filter((u) => u.id !== userId);
-    saveStoredUsers(updated);
   },
 
   /**
@@ -176,7 +215,10 @@ export const adminService = {
    */
   async deleteRoom(roomId: string): Promise<void> {
     if (isSupabaseConfigured() && supabase) {
-      await supabase.from('chat_rooms').delete().eq('id', roomId);
+      const { error } = await supabase.from('chat_rooms').delete().eq('id', roomId);
+      if (error) {
+        throw new Error(error.message || 'Failed to delete chat room.');
+      }
     }
     await chatService.leaveRoom(roomId, 'admin');
   },

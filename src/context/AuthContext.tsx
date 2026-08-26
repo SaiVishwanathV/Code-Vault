@@ -37,6 +37,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user?.id) {
       try {
         const prof = await profileService.getProfile(user.id);
+        if (prof.status === 'suspended') {
+          await signOut();
+          showError('Account Suspended', 'Your account has been suspended. Please contact code.v4ult@gmail.com.');
+          return;
+        }
         setProfile(prof);
       } catch (err) {
         console.error('Failed to refresh profile:', err);
@@ -52,10 +57,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Check active session from Supabase
           const { data } = await supabase.auth.getSession();
           if (data.session?.user) {
-            setUser(data.session.user);
-            const prof = await profileService.getProfile(data.session.user.id);
-            setProfile(prof);
-            setIsGuest(false);
+            const authUser = data.session.user;
+            const prof = await profileService.getProfile(authUser.id);
+
+            if (prof.status === 'suspended') {
+              await authService.signOut();
+              authService.clearSession();
+              setUser(null);
+              setProfile(null);
+              setIsGuest(false);
+              showError('Account Suspended', 'Your account has been suspended by an administrator. Please contact code.v4ult@gmail.com for assistance.');
+            } else {
+              setUser(authUser);
+              setProfile(prof);
+              setIsGuest(false);
+            }
           } else {
             setUser(null);
             setProfile(null);
@@ -65,10 +81,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Listen to auth changes
           const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
-              setUser(session.user);
               const prof = await profileService.getProfile(session.user.id);
-              setProfile(prof);
-              setIsGuest(false);
+              if (prof.status === 'suspended') {
+                await authService.signOut();
+                authService.clearSession();
+                setUser(null);
+                setProfile(null);
+                setIsGuest(false);
+                showError('Account Suspended', 'Your account has been suspended by an administrator.');
+              } else {
+                setUser(session.user);
+                setProfile(prof);
+                setIsGuest(false);
+              }
             } else if (event === 'SIGNED_OUT') {
               setUser(null);
               setProfile(null);
@@ -109,8 +134,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await authService.verifyOtp(email, token);
       const userId = res.user?.id || `usr_${Date.now()}`;
-      setUser({ id: userId, email });
       const prof = await profileService.getProfile(userId);
+
+      if (prof.status === 'suspended') {
+        await authService.signOut();
+        authService.clearSession();
+        throw new Error('This account has been suspended by an administrator. Please contact support.');
+      }
+
+      setUser({ id: userId, email });
       setProfile(prof);
       success('Verification Successful', 'Welcome to CodeVault – Coders Space! Your profile is ready.');
       return res;
@@ -135,8 +167,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await authService.signIn(email, password);
       const userId = res.user?.id || `usr_${Date.now()}`;
-      setUser({ id: userId, email });
       const prof = await profileService.getProfile(userId);
+
+      if (prof.status === 'suspended') {
+        await authService.signOut();
+        authService.clearSession();
+        throw new Error('Your account has been suspended by an administrator. Please contact code.v4ult@gmail.com.');
+      }
+
+      setUser({ id: userId, email });
       setProfile(prof);
       success('Welcome Back!', `Logged in as ${prof.full_name || email}`);
       return res;
