@@ -34,14 +34,14 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
     try {
       const [fetchedRooms, fetchedInvites] = await Promise.all([
         chatService.getRooms(profile),
-        chatService.getPendingInvitations(profile),
+        profile ? chatService.getPendingInvitations(profile.username) : Promise.resolve([]),
       ]);
 
       setRooms(fetchedRooms);
       setPendingInvitations(fetchedInvites);
 
       if (fetchedRooms.length > 0) {
-        if (!selectedRoomId || !fetchedRooms.some((r) => r.id === selectedRoomId)) {
+        if (!selectedRoomId || !fetchedRooms.some((r: ChatRoom) => r.id === selectedRoomId)) {
           setSelectedRoomId(fetchedRooms[0].id);
         }
       } else {
@@ -60,7 +60,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
       if (profile) {
         Promise.all([
           chatService.getRooms(profile),
-          chatService.getPendingInvitations(profile),
+          chatService.getPendingInvitations(profile.username),
         ]).then(([r, inv]) => {
           setRooms(r);
           setPendingInvitations(inv);
@@ -94,16 +94,13 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
       });
     });
 
-    // 3. Fast 2-second background sync to guarantee delivery across all devices/tabs
+    // 3. Fast 3-second background sync to guarantee delivery and pin sync across all devices/tabs
     const msgInterval = setInterval(async () => {
       const latest = await chatService.getMessages(selectedRoomId);
-      setMessages((prev) => {
-        if (latest.length !== prev.length || (latest.length > 0 && latest[latest.length - 1]?.id !== prev[prev.length - 1]?.id)) {
-          return latest;
-        }
-        return prev;
-      });
-    }, 2000);
+      if (latest && latest.length > 0) {
+        setMessages(latest);
+      }
+    }, 3000);
 
     return () => {
       unsubscribe();

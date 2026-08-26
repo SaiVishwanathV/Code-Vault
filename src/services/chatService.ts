@@ -1,204 +1,157 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { ChatMessage, ChatRoom, Profile } from '../types';
+import { ChatMessage, ChatRoom, Problem, Profile } from '../types';
 
-const ROOMS_STORAGE_KEY = 'codevault_chat_rooms_v5';
-const MESSAGES_STORAGE_KEY = 'codevault_chat_messages_v5';
+const LOCAL_STORAGE_ROOMS_KEY = 'codevault_chat_rooms_v1';
+const LOCAL_STORAGE_MESSAGES_KEY = 'codevault_chat_messages_v1';
+
+const DEFAULT_ROOMS: ChatRoom[] = [
+  {
+    id: 'general-dsa',
+    name: 'General DSA Discussion',
+    description: 'Discuss algorithms, problem strategies, and ask daily doubt queries.',
+    is_private: false,
+    max_members: 50,
+    created_by: 'system',
+    creator_username: 'codevault_bot',
+    creator_name: 'CodeVault Bot',
+    member_count: 24,
+    created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+    last_message: 'Remember to always check array constraints before writing binary search!',
+    last_activity: '10m ago',
+    category: 'general',
+  },
+  {
+    id: 'faang-interview-prep',
+    name: 'FAANG & Top Tech Interviews',
+    description: 'Curated discussions for Google, Meta, Amazon, Microsoft coding rounds.',
+    is_private: false,
+    max_members: 50,
+    created_by: 'system',
+    creator_username: 'codevault_bot',
+    creator_name: 'CodeVault Bot',
+    member_count: 18,
+    created_at: new Date(Date.now() - 20 * 86400000).toISOString(),
+    last_message: 'Dynamic Programming state transitions are key for Google interviews.',
+    last_activity: '1h ago',
+    category: 'interview',
+  },
+  {
+    id: 'graph-dp-algorithms',
+    name: 'Dynamic Programming & Graphs',
+    description: 'Deep dive into hard graph traversals, Dijkstra, trees, and multi-state DP.',
+    is_private: false,
+    max_members: 50,
+    created_by: 'system',
+    creator_username: 'codevault_bot',
+    creator_name: 'CodeVault Bot',
+    member_count: 12,
+    created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
+    last_message: 'Check out Dijkstra with priority queue template in the Vault.',
+    last_activity: '3h ago',
+    category: 'topic',
+  },
+];
 
 function getStoredRooms(): ChatRoom[] {
-  const raw = localStorage.getItem(ROOMS_STORAGE_KEY);
-  if (!raw) return [];
+  const data = localStorage.getItem(LOCAL_STORAGE_ROOMS_KEY);
+  if (!data) {
+    localStorage.setItem(LOCAL_STORAGE_ROOMS_KEY, JSON.stringify(DEFAULT_ROOMS));
+    return DEFAULT_ROOMS;
+  }
   try {
-    return JSON.parse(raw);
+    return JSON.parse(data);
   } catch {
-    return [];
+    return DEFAULT_ROOMS;
   }
 }
 
 function saveStoredRooms(rooms: ChatRoom[]) {
-  localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(rooms));
+  localStorage.setItem(LOCAL_STORAGE_ROOMS_KEY, JSON.stringify(rooms));
 }
 
 function getStoredMessages(): Record<string, ChatMessage[]> {
-  const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
-  if (!raw) return {};
+  const data = localStorage.getItem(LOCAL_STORAGE_MESSAGES_KEY);
+  if (!data) {
+    const seed: Record<string, ChatMessage[]> = {
+      'general-dsa': [
+        {
+          id: 'msg-seed-1',
+          room_id: 'general-dsa',
+          user_id: 'system-1',
+          username: 'alex_codes',
+          full_name: 'Alex Chen',
+          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
+          content: 'Hey everyone! Working on LeetCode 42 (Trapping Rain Water) today. Two-pointer method is super clean.',
+          created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+          is_pinned: true,
+          reactions: { '🔥': ['user-1', 'user-2'], '👏': ['user-3'] },
+        },
+        {
+          id: 'msg-seed-2',
+          room_id: 'general-dsa',
+          user_id: 'system-2',
+          username: 'sarah_k',
+          full_name: 'Sarah Kim',
+          avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&h=100&fit=crop',
+          content: 'Monotonic stack approach also solves it in O(N) time and helps understand histogram problems!',
+          created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+          is_pinned: false,
+          reactions: { '💡': ['user-1'] },
+        },
+      ],
+      'faang-interview-prep': [
+        {
+          id: 'msg-seed-3',
+          room_id: 'faang-interview-prep',
+          user_id: 'system-3',
+          username: 'rahul_dev',
+          full_name: 'Rahul Verma',
+          avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
+          content: 'Pinned: Amazon SDE-2 recurring questions include LRU Cache and Course Schedule (Topological Sort).',
+          created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+          is_pinned: true,
+          reactions: { '🚀': ['user-1', 'user-2', 'user-3'] },
+        },
+      ],
+      'graph-dp-algorithms': [],
+    };
+    localStorage.setItem(LOCAL_STORAGE_MESSAGES_KEY, JSON.stringify(seed));
+    return seed;
+  }
   try {
-    return JSON.parse(raw);
+    return JSON.parse(data);
   } catch {
     return {};
   }
 }
 
-function saveStoredMessages(messagesMap: Record<string, ChatMessage[]>) {
-  localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(messagesMap));
+function saveStoredMessages(messages: Record<string, ChatMessage[]>) {
+  localStorage.setItem(LOCAL_STORAGE_MESSAGES_KEY, JSON.stringify(messages));
 }
 
 export const chatService = {
   /**
-   * Fetch all registered users for autocomplete in invitations
-   */
-  async getAvailableUsers(excludeUserId?: string): Promise<{ id: string; username: string; full_name: string; avatar_url?: string }[]> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, username, full_name, avatar_url')
-          .eq('status', 'active');
-
-        if (!error && data) {
-          return data.filter((u) => u.id !== excludeUserId);
-        }
-      } catch (err) {
-        console.error('Error fetching available users:', err);
-      }
-    }
-    return [];
-  },
-
-  /**
-   * Fetch pending room invitations specifically addressed to the current user
-   */
-  async getPendingInvitations(currentUser?: Profile | null): Promise<ChatRoom[]> {
-    if (!currentUser || !currentUser.username) return [];
-
-    const myUsername = currentUser.username.toLowerCase().trim().replace(/^@/, '');
-
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data: dbRooms, error } = await supabase
-          .from('chat_rooms')
-          .select('*')
-          .eq('is_private', true);
-
-        if (!error && dbRooms) {
-          return dbRooms.filter((r) => {
-            const rawInvites = Array.isArray(r.invited_usernames) ? r.invited_usernames : [];
-            const cleanInvites = rawInvites.map((u: string) => String(u).toLowerCase().trim().replace(/^@/, ''));
-            const isInvited = cleanInvites.includes(myUsername);
-
-            const joined = Array.isArray(r.joined_user_ids) ? r.joined_user_ids : [];
-            const alreadyJoined = joined.includes(currentUser.id);
-            const isCreator = r.created_by === currentUser.id;
-
-            return isInvited && !alreadyJoined && !isCreator;
-          }) as ChatRoom[];
-        }
-      } catch (err) {
-        console.error('Error fetching pending invitations from Supabase:', err);
-      }
-    }
-
-    const rooms = getStoredRooms();
-    return rooms.filter((r) => {
-      const rawInvites = Array.isArray(r.invited_usernames) ? r.invited_usernames : [];
-      const cleanInvites = rawInvites.map((u: string) => String(u).toLowerCase().trim().replace(/^@/, ''));
-      const isInvited = r.is_private && cleanInvites.includes(myUsername);
-      const alreadyJoined = r.joined_user_ids?.includes(currentUser.id);
-      const isCreator = r.created_by === currentUser.id;
-      return isInvited && !alreadyJoined && !isCreator;
-    });
-  },
-
-  /**
-   * Accept an in-app room invitation and enter the room
-   */
-  async acceptRoomInvite(roomId: string, currentUser: Profile): Promise<ChatRoom> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('chat_rooms')
-          .select('*')
-          .eq('id', roomId)
-          .single();
-
-        if (error || !data) throw new Error('Room not found in database');
-
-        const currentJoined = Array.isArray(data.joined_user_ids) ? data.joined_user_ids : [];
-        if (!currentJoined.includes(currentUser.id)) {
-          const updatedJoined = [...currentJoined, currentUser.id];
-          const newMemberCount = (data.member_count || 1) + 1;
-
-          await supabase
-            .from('chat_rooms')
-            .update({
-              joined_user_ids: updatedJoined,
-              member_count: newMemberCount,
-            })
-            .eq('id', roomId);
-
-          data.joined_user_ids = updatedJoined;
-          data.member_count = newMemberCount;
-        }
-
-        return data as ChatRoom;
-      } catch (err: any) {
-        console.error('Supabase accept error:', err);
-        throw new Error(err.message || 'Failed to accept room invitation');
-      }
-    }
-
-    const rooms = getStoredRooms();
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) throw new Error('Room not found');
-
-    if (!room.joined_user_ids?.includes(currentUser.id)) {
-      room.joined_user_ids = [...(room.joined_user_ids || []), currentUser.id];
-      room.member_count = (room.member_count || 1) + 1;
-      saveStoredRooms(rooms);
-    }
-
-    return room;
-  },
-
-  /**
-   * Decline an in-app room invitation
-   */
-  async declineRoomInvite(roomId: string, currentUser: Profile): Promise<void> {
-    const myUsername = currentUser.username.toLowerCase().trim().replace(/^@/, '');
-
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data } = await supabase.from('chat_rooms').select('invited_usernames').eq('id', roomId).single();
-        if (data && Array.isArray(data.invited_usernames)) {
-          const filtered = data.invited_usernames.filter(
-            (u: string) => String(u).toLowerCase().trim().replace(/^@/, '') !== myUsername
-          );
-          await supabase.from('chat_rooms').update({ invited_usernames: filtered }).eq('id', roomId);
-        }
-      } catch (err) {
-        console.error('Failed to decline invitation on Supabase:', err);
-      }
-    }
-
-    const rooms = getStoredRooms();
-    const target = rooms.find((r) => r.id === roomId);
-    if (target && Array.isArray(target.invited_usernames)) {
-      target.invited_usernames = target.invited_usernames.filter(
-        (u) => String(u).toLowerCase().trim().replace(/^@/, '') !== myUsername
-      );
-      saveStoredRooms(rooms);
-    }
-  },
-
-  /**
-   * Fetch all open & user accessible private rooms from database
+   * Fetch all accessible rooms
    */
   async getRooms(currentUser?: Profile | null): Promise<ChatRoom[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data: dbRooms, error } = await supabase
+        const { data, error } = await supabase
           .from('chat_rooms')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && dbRooms) {
-          return dbRooms.filter((r) => {
-            if (!r.is_private) return true; // Open to all
-            if (!currentUser) return false;
+        if (!error && data && data.length > 0) {
+          const remoteRooms = data as ChatRoom[];
+          if (!currentUser) return remoteRooms.filter((r) => !r.is_private);
+
+          return remoteRooms.filter((r) => {
+            if (!r.is_private) return true;
             if (r.created_by === currentUser.id) return true;
-            const joined = Array.isArray(r.joined_user_ids) ? r.joined_user_ids : [];
-            if (joined.includes(currentUser.id)) return true;
+            if (r.joined_user_ids?.includes(currentUser.id)) return true;
+            if (r.invited_usernames?.includes(currentUser.username)) return true;
             return false;
-          }) as ChatRoom[];
+          });
         }
       } catch (err) {
         console.error('Error fetching chat rooms from Supabase:', err);
@@ -217,7 +170,7 @@ export const chatService = {
   },
 
   /**
-   * Create a new room (Open public room or Private room with direct invited users)
+   * Create a new room
    */
   async createRoom(
     name: string,
@@ -252,7 +205,7 @@ export const chatService = {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { error: insertError } = await supabase.from('chat_rooms').insert({
+        await supabase.from('chat_rooms').insert({
           id: newRoom.id,
           name: newRoom.name,
           description: newRoom.description,
@@ -266,10 +219,6 @@ export const chatService = {
           invited_usernames: newRoom.invited_usernames,
           joined_user_ids: [currentUser.id],
         });
-
-        if (insertError) {
-          console.error('Error inserting room to Supabase:', insertError);
-        }
       } catch (err) {
         console.error('Failed to create room in Supabase:', err);
       }
@@ -282,11 +231,25 @@ export const chatService = {
   },
 
   /**
-   * Get messages for a given room
+   * Get messages for a given room from Supabase
    */
   async getMessages(roomId: string): Promise<ChatMessage[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
+        let pinnedMsgId: string | null = null;
+        try {
+          const { data: roomData } = await supabase
+            .from('chat_rooms')
+            .select('pinned_message_id')
+            .eq('id', roomId)
+            .maybeSingle();
+          if (roomData?.pinned_message_id) {
+            pinnedMsgId = roomData.pinned_message_id;
+          }
+        } catch {
+          // ignore
+        }
+
         const { data: dbMessages, error } = await supabase
           .from('chat_messages')
           .select(`
@@ -309,7 +272,7 @@ export const chatService = {
           .order('created_at', { ascending: true });
 
         if (!error && dbMessages) {
-          return dbMessages.map((msg: any) => ({
+          const mapped: ChatMessage[] = dbMessages.map((msg: any) => ({
             id: msg.id,
             room_id: msg.room_id,
             user_id: msg.user_id,
@@ -318,11 +281,17 @@ export const chatService = {
             avatar_url: msg.profiles?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${msg.user_id}`,
             content: msg.content,
             created_at: msg.created_at,
-            is_pinned: msg.is_pinned || false,
+            is_pinned: Boolean(msg.is_pinned === true || (pinnedMsgId && msg.id === pinnedMsgId)),
             reply_to: msg.reply_to,
             shared_problem: msg.shared_problem,
             reactions: msg.reactions || {},
           }));
+
+          const cached = getStoredMessages();
+          cached[roomId] = mapped;
+          saveStoredMessages(cached);
+
+          return mapped;
         }
       } catch (err) {
         console.error('Error fetching messages from Supabase:', err);
@@ -355,7 +324,6 @@ export const chatService = {
               const newRow = payload.new;
               if (!newRow) return;
 
-              // Fetch sender profile details
               let senderProfile: any = null;
               try {
                 const { data } = await client
@@ -395,6 +363,7 @@ export const chatService = {
         console.error('Error setting up Supabase realtime channel:', err);
       }
     }
+
     return () => {};
   },
 
@@ -409,14 +378,15 @@ export const chatService = {
     sharedProblem?: ChatMessage['shared_problem']
   ): Promise<ChatMessage> {
     const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       room_id: roomId,
       user_id: currentUser.id,
       username: currentUser.username,
       full_name: currentUser.full_name,
-      avatar_url: currentUser.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.username}`,
+      avatar_url: currentUser.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.id}`,
       content: content.trim(),
       created_at: new Date().toISOString(),
+      is_pinned: false,
       reply_to: replyTo,
       shared_problem: sharedProblem,
       reactions: {},
@@ -429,18 +399,18 @@ export const chatService = {
           room_id: roomId,
           user_id: currentUser.id,
           content: newMsg.content,
-          reply_to: newMsg.reply_to,
-          shared_problem: newMsg.shared_problem,
+          is_pinned: false,
+          reply_to: replyTo,
+          shared_problem: sharedProblem,
           reactions: {},
         });
       } catch (err) {
-        console.error('Error posting message to Supabase:', err);
+        console.error('Error sending message to Supabase:', err);
       }
     }
 
     const messages = getStoredMessages();
-    const roomMsgs = messages[roomId] || [];
-    messages[roomId] = [...roomMsgs, newMsg];
+    messages[roomId] = [...(messages[roomId] || []), newMsg];
     saveStoredMessages(messages);
 
     return newMsg;
@@ -466,7 +436,7 @@ export const chatService = {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        // Try RPC first for security definer bypass
+        // 1. Try RPC first
         const { data: rpcResult, error: rpcErr } = await supabase.rpc('toggle_pin_chat_message', {
           p_room_id: roomId,
           p_message_id: messageId,
@@ -475,15 +445,17 @@ export const chatService = {
         if (!rpcErr && rpcResult !== null) {
           isPinned = rpcResult;
         } else {
-          // Direct table update fallback
-          const { error } = await supabase
+          // 2. Direct chat_messages update fallback
+          await supabase
             .from('chat_messages')
             .update({ is_pinned: isPinned })
             .eq('id', messageId);
 
-          if (error) {
-            console.error('Error updating pin on Supabase:', error);
-          }
+          // 3. Update chat_rooms table pinned_message_id for redundancy
+          await supabase
+            .from('chat_rooms')
+            .update({ pinned_message_id: isPinned ? messageId : null })
+            .eq('id', roomId);
         }
       } catch (err) {
         console.error('Error updating pin on Supabase:', err);
@@ -537,24 +509,190 @@ export const chatService = {
   },
 
   /**
-   * Leave a study room
+   * Leave a private room
    */
   async leaveRoom(roomId: string, userId: string): Promise<void> {
+    const rooms = getStoredRooms();
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return;
+
+    room.joined_user_ids = room.joined_user_ids?.filter((id) => id !== userId) || [];
+    room.member_count = Math.max(1, (room.member_count || 1) - 1);
+    saveStoredRooms(rooms);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data } = await supabase.from('chat_rooms').select('joined_user_ids, member_count').eq('id', roomId).single();
-        if (data && Array.isArray(data.joined_user_ids)) {
-          const updatedJoined = data.joined_user_ids.filter((id: string) => id !== userId);
-          const newCount = Math.max(1, (data.member_count || 2) - 1);
-          await supabase.from('chat_rooms').update({ joined_user_ids: updatedJoined, member_count: newCount }).eq('id', roomId);
-        }
+        await supabase
+          .from('chat_rooms')
+          .update({
+            joined_user_ids: room.joined_user_ids,
+            member_count: room.member_count,
+          })
+          .eq('id', roomId);
       } catch (err) {
         console.error('Error leaving room on Supabase:', err);
       }
     }
+  },
+
+  /**
+   * Get available users for room invitations
+   */
+  async getAvailableUsers(currentUserId?: string): Promise<Profile[]> {
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, username, avatar_url, role, status')
+          .limit(100);
+
+        if (!error && data) {
+          const profiles = data as Profile[];
+          return currentUserId ? profiles.filter((p) => p.id !== currentUserId) : profiles;
+        }
+      } catch (err) {
+        console.error('Error fetching profiles in chatService:', err);
+      }
+    }
+    return [];
+  },
+
+  /**
+   * Get pending room invitations for user
+   */
+  async getPendingInvitations(usernameOrProfile: string | Profile): Promise<ChatRoom[]> {
+    const rawUsername = typeof usernameOrProfile === 'string' ? usernameOrProfile : usernameOrProfile.username;
+    const cleanUsername = rawUsername.replace(/^@/, '').toLowerCase();
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('chat_rooms')
+          .select('*')
+          .eq('is_private', true);
+
+        if (!error && data) {
+          return (data as ChatRoom[]).filter((r) =>
+            r.invited_usernames?.some((u) => u.toLowerCase() === cleanUsername)
+          );
+        }
+      } catch (err) {
+        console.error('Error fetching pending invitations:', err);
+      }
+    }
 
     const rooms = getStoredRooms();
-    const updated = rooms.filter((r) => r.id !== roomId || r.created_by !== userId);
-    saveStoredRooms(updated);
+    return rooms.filter(
+      (r) =>
+        r.is_private &&
+        r.invited_usernames?.some((u) => u.toLowerCase() === cleanUsername)
+    );
+  },
+
+  /**
+   * Accept private room invitation
+   */
+  async acceptRoomInvite(roomId: string, user: Profile): Promise<ChatRoom> {
+    const cleanUsername = user.username.replace(/^@/, '').toLowerCase();
+    const rooms = getStoredRooms();
+    let room = rooms.find((r) => r.id === roomId);
+
+    if (room) {
+      room.joined_user_ids = [...(room.joined_user_ids || []), user.id];
+      room.invited_usernames = room.invited_usernames?.filter(
+        (u) => u.toLowerCase() !== cleanUsername
+      );
+      room.member_count = (room.member_count || 1) + 1;
+      saveStoredRooms(rooms);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data: currentRoom } = await supabase
+          .from('chat_rooms')
+          .select('*')
+          .eq('id', roomId)
+          .single();
+
+        if (currentRoom) {
+          const updatedJoined = Array.from(
+            new Set([...(currentRoom.joined_user_ids || []), user.id])
+          );
+          const updatedInvited = (currentRoom.invited_usernames || []).filter(
+            (u: string) => u.toLowerCase() !== cleanUsername
+          );
+
+          const { data: updatedData } = await supabase
+            .from('chat_rooms')
+            .update({
+              joined_user_ids: updatedJoined,
+              invited_usernames: updatedInvited,
+              member_count: updatedJoined.length,
+            })
+            .eq('id', roomId)
+            .select()
+            .single();
+
+          if (updatedData) {
+            return updatedData as ChatRoom;
+          }
+        }
+      } catch (err) {
+        console.error('Error accepting room invite:', err);
+      }
+    }
+
+    return room || {
+      id: roomId,
+      name: 'Private Room',
+      description: '',
+      is_private: true,
+      max_members: 25,
+      created_by: user.id,
+      creator_username: user.username,
+      creator_name: user.full_name,
+      member_count: 1,
+      created_at: new Date().toISOString(),
+      category: 'general',
+    };
+  },
+
+  /**
+   * Decline private room invitation
+   */
+  async declineRoomInvite(roomId: string, usernameOrProfile: string | Profile): Promise<void> {
+    const rawUsername = typeof usernameOrProfile === 'string' ? usernameOrProfile : usernameOrProfile.username;
+    const cleanUsername = rawUsername.replace(/^@/, '').toLowerCase();
+    const rooms = getStoredRooms();
+    const room = rooms.find((r) => r.id === roomId);
+
+    if (room) {
+      room.invited_usernames = room.invited_usernames?.filter(
+        (u) => u.toLowerCase() !== cleanUsername
+      );
+      saveStoredRooms(rooms);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data: currentRoom } = await supabase
+          .from('chat_rooms')
+          .select('invited_usernames')
+          .eq('id', roomId)
+          .single();
+
+        if (currentRoom) {
+          const updatedInvited = (currentRoom.invited_usernames || []).filter(
+            (u: string) => u.toLowerCase() !== cleanUsername
+          );
+
+          await supabase
+            .from('chat_rooms')
+            .update({ invited_usernames: updatedInvited })
+            .eq('id', roomId);
+        }
+      } catch (err) {
+        console.error('Error declining room invite:', err);
+      }
+    }
   },
 };
