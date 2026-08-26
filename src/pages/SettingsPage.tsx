@@ -86,34 +86,62 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ problems, onOpenCsvM
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Light Theme Card — always light-styled so text is visible */}
             <button
               onClick={() => setTheme('light')}
               className={`p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
                 theme === 'light'
-                  ? 'border-[#E9B949] bg-[#FFF9EE] ring-2 ring-[#E9B949]/30'
-                  : 'border-[#EFE6D5] dark:border-[#2C323F] hover:bg-[#FFF9EE]/50'
+                  ? 'border-[#E9B949] ring-2 ring-[#E9B949]/40'
+                  : 'border-[#EFE6D5] dark:border-[#3A4150] hover:border-[#D4A32D]'
               }`}
+              style={{ backgroundColor: '#FFFDF8' }}
             >
               <div>
-                <span className="font-bold text-xs text-[#1A202C] block">Warm White (Default)</span>
-                <span className="text-[11px] text-[#718096]">Soft cream background with minimal dark text</span>
+                <span className="font-bold text-xs block" style={{ color: '#1A202C' }}>
+                  ☀️ Warm White (Default)
+                </span>
+                <span className="text-[11px]" style={{ color: '#718096' }}>
+                  Soft cream background with minimal dark text
+                </span>
               </div>
-              <Sun className="w-5 h-5 text-[#E9B949]" />
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ml-2 ${
+                  theme === 'light'
+                    ? 'bg-[#E9B949]'
+                    : 'bg-[#EFE6D5]'
+                }`}
+              >
+                <Sun className="w-4 h-4" style={{ color: '#8C5D0B' }} />
+              </div>
             </button>
 
+            {/* Dark Theme Card — always dark-styled so text is visible */}
             <button
               onClick={() => setTheme('dark')}
               className={`p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
                 theme === 'dark'
-                  ? 'border-[#E9B949] bg-[#1E222B] ring-2 ring-[#E9B949]/30'
-                  : 'border-[#EFE6D5] dark:border-[#2C323F] hover:bg-[#1E222B]/50'
+                  ? 'border-[#E9B949] ring-2 ring-[#E9B949]/40'
+                  : 'border-[#2C323F] hover:border-[#D4A32D]'
               }`}
+              style={{ backgroundColor: '#1E222B' }}
             >
               <div>
-                <span className="font-bold text-xs text-white block">Espresso Slate Dark</span>
-                <span className="text-[11px] text-[#A0AEC0]">Warm dark obsidian for night coding</span>
+                <span className="font-bold text-xs block" style={{ color: '#F7F8FA' }}>
+                  🌙 Espresso Slate Dark
+                </span>
+                <span className="text-[11px]" style={{ color: '#A0AEC0' }}>
+                  Warm dark obsidian for night coding
+                </span>
               </div>
-              <Moon className="w-5 h-5 text-[#E9B949]" />
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ml-2 ${
+                  theme === 'dark'
+                    ? 'bg-[#E9B949]'
+                    : 'bg-[#2C323F]'
+                }`}
+              >
+                <Moon className="w-4 h-4" style={{ color: theme === 'dark' ? '#1A202C' : '#E9B949' }} />
+              </div>
             </button>
           </div>
         </div>

@@ -23,7 +23,8 @@
 ### 📊 3. DSA Problem Tracking & Spaced Repetition
 - **Multi-Platform Tracking**: Catalog problems across LeetCode, Codeforces, HackerRank, GeeksforGeeks, CodeChef, Striver SDE Sheet, and AtCoder.
 - **Spaced Repetition & Revision Queue**: Automatically flag tricky edge cases to the retention queue, schedule review dates, and track revision counters.
-- **GitHub-Style 365-Day Contribution Heatmap**: Interactive heatmap with daily activity logs and streak tracking.
+- **GitHub-Style 365-Day Contribution Heatmap**: Interactive heatmap with daily activity logs, streak tracking, and today's ring highlight.
+- **Dynamic Monthly Calendar View**: Day-by-day problem log with progressive daily unlocking — past days show activity, today shows an active CTA, and future days show a locked upcoming state that opens each day automatically.
 - **Interactive Analytics**: Difficulty breakdown donut charts (Easy/Medium/Hard), platform distribution, and topic mastery.
 - **Spotlight Search (`⌘K` / `Ctrl+K`)**: Instant modal search across problem titles, IDs (e.g. `LC-1`, `CF-158A`), topics, platforms, and personal notes.
 - **Notion-Style Markdown Notes**: Live split-view markdown editor with syntax highlighting and code copy actions.
@@ -92,7 +93,7 @@
     │   ├── community/         # ChatWindow, RoomList, CreateRoomModal
     │   ├── problems/          # AddEditModal, ProblemTable, ProblemDetailModal, CsvModal
     │   ├── dashboard/         # StatCards, StreakBanner, GoalCard, Charts
-    │   ├── history/           # HeatmapCalendar, TimelineView
+    │   ├── history/           # HeatmapCalendar, TimelineView, MonthlyCalendarView (with progressive daily unlock)
     │   ├── analytics/         # Recharts Donut & Trend charts
     │   ├── revision/          # Spaced repetition cards
     │   ├── notes/             # Markdown live split editor
@@ -154,6 +155,19 @@ All tables (`profiles`, `problems`, `chat_rooms`, `chat_messages`, `streaks`, `a
 Need help, found a bug, or have a suggestion?
 - **Email**: [code.v4ult@gmail.com](mailto:code.v4ult@gmail.com)
 - **Phone / WhatsApp**: [+91 9440773606](https://wa.me/919440773606)
+
+---
+
+## 📋 Changelog
+
+### v1.1 (Latest)
+- 🗓️ **Dynamic Monthly Calendar**: Progressive day-by-day unlocking system — starts from launch day (Aug 26, 2026), unlocks daily going forward. Future days show a locked state that opens automatically each calendar day.
+- 🔥 **Revamped Heatmap**: New intensity palette (Emerald → Gold), today's golden ring highlight, and live problem breakdown on click.
+- 🎨 **Settings Page Fix**: Interface Appearance theme cards now render their own fixed background colors (light card stays cream, dark card stays obsidian) so text is always clearly readable regardless of the active theme.
+- 🔗 **Username Login**: Secure `get_email_by_username` RPC bypasses RLS for unauthenticated lookups.
+- 🔑 **Password Reset**: Redirects to deployed domain (`https://c0dev4ult.web.app/reset-password`) — no longer opens `localhost`.
+- 📌 **Pinned Messages Persist**: Community room pinned messages now survive page refresh via dual Supabase sync (chat_messages + chat_rooms).
+- 👥 **Room Invitations Backend**: `acceptRoomInvite`, `declineRoomInvite`, and `getAvailableUsers` fully connected to Supabase.
 
 ---
 

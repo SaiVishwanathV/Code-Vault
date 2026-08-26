@@ -8,9 +8,14 @@ import { MonthlyCalendarView } from '../components/history/MonthlyCalendarView';
 interface HistoryPageProps {
   problems: Problem[];
   onSelectProblem: (problem: Problem) => void;
+  onOpenAddProblem?: () => void;
 }
 
-export const HistoryPage: React.FC<HistoryPageProps> = ({ problems, onSelectProblem }) => {
+export const HistoryPage: React.FC<HistoryPageProps> = ({
+  problems,
+  onSelectProblem,
+  onOpenAddProblem,
+}) => {
   const [activeTab, setActiveTab] = useState<'heatmap' | 'timeline' | 'calendar'>('heatmap');
 
   return (
@@ -80,7 +85,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ problems, onSelectProb
       )}
 
       {activeTab === 'calendar' && (
-        <MonthlyCalendarView problems={problems} onSelectProblem={onSelectProblem} />
+        <MonthlyCalendarView
+          problems={problems}
+          onSelectProblem={onSelectProblem}
+          onOpenAddProblem={onOpenAddProblem}
+        />
       )}
     </div>
   );

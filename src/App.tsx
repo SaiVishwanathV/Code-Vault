@@ -333,6 +333,7 @@ export function App() {
                   <HistoryPage
                     problems={problems}
                     onSelectProblem={(p) => setSelectedProblemForDetail(p)}
+                    onOpenAddProblem={() => setIsAddProblemOpen(true)}
                   />
                 </ProtectedRoute>
               }
