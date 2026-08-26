@@ -2,28 +2,101 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { INITIAL_MOCK_PROFILE } from '../lib/mockData';
 import { LeaderboardEntry, LeaderboardFilter, Profile } from '../types';
 
-const PROFILE_STORAGE_KEY = 'codevault_current_user';
-const LEADERBOARD_CACHE_KEY = 'codevault_leaderboard_cache';
-
 export const profileService = {
   /**
-   * Get user profile details
+   * Get user profile details with automatic row healing & local caching
    */
   async getProfile(userId?: string): Promise<Profile> {
-    if (isSupabaseConfigured() && supabase && userId && !userId.startsWith('mock-')) {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (!error && data) return data as Profile;
+    if (!userId) {
+      return INITIAL_MOCK_PROFILE;
     }
 
-    const local = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (local) {
+    const cacheKey = `codevault_profile_${userId}`;
+
+    if (isSupabaseConfigured() && supabase && !userId.startsWith('mock-')) {
       try {
-        return JSON.parse(local);
-      } catch {
-        return INITIAL_MOCK_PROFILE;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          return data as Profile;
+        }
+
+        // If profile row doesn't exist in Supabase yet, heal/create it automatically
+        if (!data) {
+          const { data: authData } = await supabase.auth.getUser();
+          const authUser = authData?.user;
+          if (authUser && authUser.id === userId) {
+            const rawUsername =
+              authUser.user_metadata?.username ||
+              authUser.email?.split('@')[0] ||
+              `coder_${userId.substring(0, 6)}`;
+            const rawFullName =
+              authUser.user_metadata?.full_name ||
+              authUser.email?.split('@')[0] ||
+              'Coder';
+            const role =
+              authUser.email?.toLowerCase() === 'code.v4ult@gmail.com' ||
+              authUser.email?.toLowerCase() === 'admin@codevault.dev'
+                ? 'admin'
+                : 'user';
+
+            const newProfile: Profile = {
+              id: userId,
+              email: authUser.email || '',
+              username: rawUsername.toLowerCase(),
+              full_name: rawFullName,
+              avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${rawUsername}`,
+              target_goal: 500,
+              role,
+              status: 'active',
+              created_at: new Date().toISOString(),
+              last_login: new Date().toISOString(),
+            };
+
+            const { data: inserted, error: insertErr } = await supabase
+              .from('profiles')
+              .upsert(newProfile)
+              .select()
+              .single();
+
+            if (!insertErr && inserted) {
+              localStorage.setItem(cacheKey, JSON.stringify(inserted));
+              return inserted as Profile;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching profile from Supabase:', err);
       }
     }
-    return INITIAL_MOCK_PROFILE;
+
+    // Check cached profile for this specific user ID
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.id === userId) return parsed;
+      } catch {
+        // ignore
+      }
+    }
+
+    // Default real profile skeleton for this user
+    return {
+      id: userId,
+      email: '',
+      username: `user_${userId.substring(0, 6)}`,
+      full_name: 'CodeVault Coder',
+      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`,
+      target_goal: 500,
+      role: 'user',
+      status: 'active',
+    };
   },
 
   /**
@@ -31,18 +104,23 @@ export const profileService = {
    */
   async updateProfile(userId: string, updates: Partial<Profile>): Promise<Profile> {
     const timestamp = new Date().toISOString();
+    const cacheKey = `codevault_profile_${userId}`;
 
     if (isSupabaseConfigured() && supabase && userId && !userId.startsWith('mock-')) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ ...updates, updated_at: timestamp })
-        .eq('id', userId)
-        .select()
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({ ...updates, updated_at: timestamp })
+          .eq('id', userId)
+          .select()
+          .single();
 
-      if (!error && data) {
-        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(data));
-        return data as Profile;
+        if (!error && data) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          return data as Profile;
+        }
+      } catch (err) {
+        console.error('Error updating profile on Supabase:', err);
       }
     }
 
@@ -52,7 +130,7 @@ export const profileService = {
       ...updates,
       updated_at: timestamp,
     };
-    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(cacheKey, JSON.stringify(updated));
     return updated;
   },
 
@@ -127,41 +205,6 @@ export const profileService = {
       }
     }
 
-    // Local persistent state for offline / demo mode
-    const rawCache = localStorage.getItem(LEADERBOARD_CACHE_KEY);
-    let list: LeaderboardEntry[] = rawCache ? JSON.parse(rawCache) : [];
-
-    if (list.length === 0) {
-      const currentUser = localStorage.getItem(PROFILE_STORAGE_KEY);
-      if (currentUser) {
-        try {
-          const u: Profile = JSON.parse(currentUser);
-          list = [
-            {
-              rank: 1,
-              id: u.id,
-              full_name: u.full_name || 'Active Coder',
-              username: u.username,
-              avatar_url: u.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.username}`,
-              total_solved: 0,
-              easy_count: 0,
-              medium_count: 0,
-              hard_count: 0,
-              current_streak: 0,
-              longest_streak: 0,
-              role: u.role,
-              status: u.status,
-            },
-          ];
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    return list.map((entry, idx) => ({
-      ...entry,
-      rank: idx + 1,
-    }));
+    return [];
   },
 };

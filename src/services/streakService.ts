@@ -1,9 +1,6 @@
 import { parseISO, subDays, format, differenceInCalendarDays } from 'date-fns';
 import { Problem, Streak } from '../types';
-import { INITIAL_MOCK_STREAK } from '../lib/mockData';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-
-const STREAK_STORAGE_KEY = 'codetracker_streak';
 
 export const streakService = {
   /**
@@ -76,38 +73,56 @@ export const streakService = {
   async getStreak(userId?: string, problems?: Problem[]): Promise<Streak> {
     if (problems && problems.length > 0) {
       const { currentStreak, longestStreak } = this.calculateStreakFromProblems(problems);
-      return {
-        user_id: userId || 'mock-user-123',
+      const computed: Streak = {
+        user_id: userId || '',
         current_streak: currentStreak,
         longest_streak: longestStreak,
         last_active_date: problems[0]?.solved_date || format(new Date(), 'yyyy-MM-dd'),
       };
+
+      if (isSupabaseConfigured() && supabase && userId && !userId.startsWith('mock-')) {
+        try {
+          await supabase.from('streaks').upsert({
+            user_id: userId,
+            current_streak: currentStreak,
+            longest_streak: longestStreak,
+            last_active_date: computed.last_active_date,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+        } catch {
+          // ignore
+        }
+      }
+
+      return computed;
     }
 
     if (isSupabaseConfigured() && supabase && userId && !userId.startsWith('mock-')) {
-      const { data } = await supabase.from('streaks').select('*').eq('user_id', userId).single();
-      if (data) return data as Streak;
-    }
-
-    const local = localStorage.getItem(STREAK_STORAGE_KEY);
-    if (local) {
       try {
-        return JSON.parse(local);
+        const { data } = await supabase.from('streaks').select('*').eq('user_id', userId).maybeSingle();
+        if (data) return data as Streak;
       } catch {
-        return INITIAL_MOCK_STREAK;
+        // ignore
       }
     }
 
-    return INITIAL_MOCK_STREAK;
+    return {
+      user_id: userId || '',
+      current_streak: 0,
+      longest_streak: 0,
+    };
   },
 
   /**
-   * Update streak locally or remotely
+   * Update streak locally and remotely
    */
   async saveStreak(streak: Streak) {
-    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(streak));
     if (isSupabaseConfigured() && supabase && streak.user_id && !streak.user_id.startsWith('mock-')) {
-      await supabase.from('streaks').upsert(streak);
+      try {
+        await supabase.from('streaks').upsert(streak, { onConflict: 'user_id' });
+      } catch {
+        // ignore
+      }
     }
   },
 };

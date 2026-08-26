@@ -52,9 +52,9 @@ export function App() {
   // App State
   const [problems, setProblems] = useState<Problem[]>([]);
   const [streak, setStreak] = useState<Streak>({
-    user_id: 'mock-user-123',
-    current_streak: 14,
-    longest_streak: 28,
+    user_id: '',
+    current_streak: 0,
+    longest_streak: 0,
   });
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
