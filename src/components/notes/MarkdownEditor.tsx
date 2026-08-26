@@ -3,6 +3,7 @@ import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
+  Strikethrough,
   Code,
   Heading1,
   Heading2,
@@ -10,6 +11,7 @@ import {
   List,
   ListOrdered,
   Quote,
+  Link as LinkIcon,
   Eye,
   Edit3,
   Save,
@@ -55,7 +57,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const newContent = content.substring(0, start) + replacement + content.substring(end);
     setContent(newContent);
 
-    // Re-focus and set selection
     setTimeout(() => {
       textarea.focus();
       const newCursorPos = start + before.length;
@@ -63,7 +64,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }, 20);
   };
 
-  const handleLinePrefix = (prefix: string, defaultText: string = 'List item') => {
+  const handleLinePrefix = (prefix: string, defaultText: string = 'Item') => {
     const textarea = textareaRef.current;
     if (!textarea) {
       setContent((prev) => (prev ? `${prev}\n${prefix}${defaultText}` : `${prefix}${defaultText}`));
@@ -75,13 +76,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const selected = content.substring(start, end);
 
     if (selected) {
-      // Apply prefix to each line in selection
       const lines = selected.split('\n');
       const prefixed = lines.map((l) => `${prefix}${l}`).join('\n');
       const newContent = content.substring(0, start) + prefixed + content.substring(end);
       setContent(newContent);
     } else {
-      // Find beginning of current line
       const beforeCursor = content.substring(0, start);
       const lastNewline = beforeCursor.lastIndexOf('\n');
       const insertPos = lastNewline === -1 ? 0 : lastNewline + 1;
@@ -93,6 +92,27 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         textarea.focus();
         textarea.setSelectionRange(start + prefix.length, start + prefix.length);
       }, 20);
+    }
+  };
+
+  const insertLink = () => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? 0;
+    const end = textarea?.selectionEnd ?? 0;
+    const selected = content.substring(start, end);
+
+    const titleText = selected || 'Problem Link / Resource';
+    const linkSyntax = `[${titleText}](https://example.com)`;
+
+    if (textarea) {
+      const newContent = content.substring(0, start) + linkSyntax + content.substring(end);
+      setContent(newContent);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + titleText.length + 3, start + linkSyntax.length - 1);
+      }, 20);
+    } else {
+      setContent((prev) => prev + linkSyntax);
     }
   };
 
@@ -130,7 +150,7 @@ int solve(vector<int>& nums) {
     setIsSaving(true);
     try {
       await onSave(content);
-      success('Notes Saved', 'Your markdown notes have been updated in Supabase.');
+      success('Notes Saved', 'Your markdown notes have been saved to Supabase.');
     } finally {
       setIsSaving(false);
     }
@@ -143,12 +163,12 @@ int solve(vector<int>& nums) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Basic Markdown Parser for Preview
+  // Full Markdown Renderer
   const renderMarkdown = (text: string) => {
     if (!text.trim()) {
       return (
         <div className="text-center py-12 text-xs text-[#A0AEC0] italic font-sans">
-          No notes written yet. Use the formatting toolbar above or add a DSA template.
+          No notes written yet. Use the formatting toolbar above or click + DSA Template.
         </div>
       );
     }
@@ -163,7 +183,6 @@ int solve(vector<int>& nums) {
       // Code Block Start/End
       if (line.trim().startsWith('```')) {
         if (inCodeBlock) {
-          // Closing code block
           elements.push(
             <div key={`code-${idx}`} className="my-3 rounded-xl overflow-hidden border border-[#EFE6D5] dark:border-[#2C323F] bg-[#16181D] text-[#E2E8F0] shadow-sm">
               <div className="px-3 py-1.5 bg-[#1E222B] text-[10px] font-mono text-[#E9B949] flex items-center justify-between border-b border-[#2C323F]">
@@ -179,7 +198,6 @@ int solve(vector<int>& nums) {
           codeBuffer = [];
           codeLanguage = '';
         } else {
-          // Opening code block
           inCodeBlock = true;
           codeLanguage = line.trim().replace('```', '') || 'cpp';
           codeBuffer = [];
@@ -221,7 +239,7 @@ int solve(vector<int>& nums) {
       // Blockquotes
       if (line.startsWith('> ')) {
         elements.push(
-          <blockquote key={idx} className="pl-3 py-1 my-2 border-l-4 border-[#E9B949] bg-[#FFF9EE]/40 dark:bg-[#1E222B]/60 text-xs italic text-[#718096] dark:text-[#A0AEC0] rounded-r-lg">
+          <blockquote key={idx} className="pl-3 py-1.5 my-2 border-l-4 border-[#E9B949] bg-[#FFF9EE]/40 dark:bg-[#1E222B]/60 text-xs italic text-[#718096] dark:text-[#A0AEC0] rounded-r-lg">
             {parseInline(line.substring(2))}
           </blockquote>
         );
@@ -268,21 +286,48 @@ int solve(vector<int>& nums) {
     return elements;
   };
 
-  // Helper to parse bold, italic, underline, inline code
+  // Inline formatting parser (Bold, Italic, Underline, Strikethrough, Inline Code, Links)
   const parseInline = (text: string): React.ReactNode => {
-    // Replace inline formatting
-    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|<u>.*?<\/u>|`.*?`)/g);
+    const parts = text.split(/(\[.*?\]\(.*?\)|\*\*.*?\*\*|\*.*?\*|<u>.*?<\/u>|~~.*?~~|`.*?`)/g);
 
     return parts.map((part, i) => {
+      // Links: [title](url)
+      const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
+      if (linkMatch) {
+        return (
+          <a
+            key={i}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#B0831E] dark:text-[#E9B949] underline font-semibold hover:text-[#8C5D0B]"
+          >
+            {linkMatch[1]}
+          </a>
+        );
+      }
+
+      // Bold: **text**
       if (part.startsWith('**') && part.endsWith('**')) {
         return <strong key={i} className="font-bold text-[#1A202C] dark:text-white">{part.slice(2, -2)}</strong>;
       }
+
+      // Italic: *text*
       if (part.startsWith('*') && part.endsWith('*')) {
         return <em key={i} className="italic text-[#8C5D0B] dark:text-[#E9B949]">{part.slice(1, -1)}</em>;
       }
+
+      // Underline: <u>text</u>
       if (part.startsWith('<u>') && part.endsWith('</u>')) {
         return <span key={i} className="underline underline-offset-2">{part.slice(3, -4)}</span>;
       }
+
+      // Strikethrough: ~~text~~
+      if (part.startsWith('~~') && part.endsWith('~~')) {
+        return <span key={i} className="line-through text-[#A0AEC0]">{part.slice(2, -2)}</span>;
+      }
+
+      // Inline Code: `code`
       if (part.startsWith('`') && part.endsWith('`')) {
         return (
           <code key={i} className="px-1.5 py-0.5 rounded bg-[#FFF9EE] dark:bg-[#16181D] border border-[#EFE6D5] dark:border-[#2C323F] font-mono text-[11px] text-[#B0831E] dark:text-[#E9B949]">
@@ -290,6 +335,7 @@ int solve(vector<int>& nums) {
           </code>
         );
       }
+
       return part;
     });
   };
@@ -328,6 +374,16 @@ int solve(vector<int>& nums) {
             title="Underline (<u>text</u>)"
           >
             <UnderlineIcon className="w-4 h-4" />
+          </button>
+
+          {/* Strikethrough */}
+          <button
+            type="button"
+            onClick={() => handleFormat('~~', '~~', 'strikethrough text')}
+            className="p-1.5 rounded-lg text-[#718096] hover:text-[#1A202C] hover:bg-[#FFF9EE] dark:hover:bg-[#252B37] transition-colors"
+            title="Strikethrough (~~text~~)"
+          >
+            <Strikethrough className="w-4 h-4" />
           </button>
 
           <span className="w-px h-4 bg-[#EFE6D5] dark:bg-[#2C323F] mx-1" />
@@ -384,7 +440,7 @@ int solve(vector<int>& nums) {
             <ListOrdered className="w-4 h-4" />
           </button>
 
-          {/* Quote */}
+          {/* Blockquote */}
           <button
             type="button"
             onClick={() => handleLinePrefix('> ')}
@@ -392,6 +448,16 @@ int solve(vector<int>& nums) {
             title="Blockquote (> quote)"
           >
             <Quote className="w-4 h-4" />
+          </button>
+
+          {/* Inline Code */}
+          <button
+            type="button"
+            onClick={() => handleFormat('`', '`', 'code')}
+            className="p-1.5 rounded-lg text-[#718096] hover:text-[#1A202C] hover:bg-[#FFF9EE] dark:hover:bg-[#252B37] transition-colors font-mono text-xs font-bold"
+            title="Inline Code (`code`)"
+          >
+            &lt;/&gt;
           </button>
 
           {/* Code Block */}
@@ -402,6 +468,16 @@ int solve(vector<int>& nums) {
             title="Code Block (```cpp)"
           >
             <Code className="w-4 h-4" />
+          </button>
+
+          {/* Link */}
+          <button
+            type="button"
+            onClick={insertLink}
+            className="p-1.5 rounded-lg text-[#718096] hover:text-[#1A202C] hover:bg-[#FFF9EE] dark:hover:bg-[#252B37] transition-colors"
+            title="Insert Link ([text](url))"
+          >
+            <LinkIcon className="w-4 h-4" />
           </button>
 
           {/* DSA Template */}

@@ -82,10 +82,15 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ problems }) => {
     chatService.getMessages(selectedRoomId).then(setMessages);
 
     // 2. Real-time WebSocket listener
-    const unsubscribe = chatService.subscribeToRoom(selectedRoomId, (newMsg) => {
+    const unsubscribe = chatService.subscribeToRoom(selectedRoomId, (incomingMsg) => {
       setMessages((prev) => {
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
-        return [...prev, newMsg];
+        const index = prev.findIndex((m) => m.id === incomingMsg.id);
+        if (index !== -1) {
+          const updated = [...prev];
+          updated[index] = incomingMsg;
+          return updated;
+        }
+        return [...prev, incomingMsg];
       });
     });
 

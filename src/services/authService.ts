@@ -36,7 +36,7 @@ export const authService = {
         .maybeSingle();
 
       if (existingEmail) {
-        throw new Error('An account with this email already exists. Please log in or reset your password.');
+        throw new Error('An account with this email already exists.');
       }
 
       // 2. Check if username already exists in profiles
@@ -64,8 +64,12 @@ export const authService = {
       });
 
       if (error) {
-        if (error.message?.toLowerCase().includes('already registered') || error.message?.toLowerCase().includes('unique')) {
-          throw new Error('An account with this email already exists. Please log in or reset your password.');
+        if (
+          error.message?.toLowerCase().includes('already registered') ||
+          error.message?.toLowerCase().includes('unique') ||
+          error.message?.toLowerCase().includes('exists')
+        ) {
+          throw new Error('An account with this email already exists.');
         }
         throw error;
       }
@@ -156,7 +160,7 @@ export const authService = {
    */
   async signIn(identifier: string, password?: string) {
     const cleanIdentifier = identifier.trim();
-    let emailToUse = cleanIdentifier.toLowerCase();
+    let emailToUse = cleanIdentifier;
 
     if (isSupabaseConfigured() && supabase) {
       // If user passed a username (no '@'), lookup their email in profiles
@@ -171,7 +175,7 @@ export const authService = {
         if (profErr || !profileMatch?.email) {
           throw new Error(`No account found with username @${usernameQuery}. Please check your spelling.`);
         }
-        emailToUse = profileMatch.email.toLowerCase();
+        emailToUse = profileMatch.email.trim();
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -197,8 +201,8 @@ export const authService = {
       return data;
     } else {
       const isAdmin =
-        emailToUse === 'code.v4ult@gmail.com' ||
-        emailToUse === 'admin@codevault.dev';
+        emailToUse.toLowerCase() === 'code.v4ult@gmail.com' ||
+        emailToUse.toLowerCase() === 'admin@codevault.dev';
 
       const userProfile: Profile = {
         id: isAdmin ? 'admin-user-001' : 'user-patel-123',
@@ -215,27 +219,18 @@ export const authService = {
   },
 
   /**
-   * Request password reset email
+   * Request password reset email using Supabase Auth
    */
   async resetPassword(email: string) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured() && supabase) {
-      // Validate that the email actually exists
-      const { data: existingUser } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', cleanEmail)
-        .maybeSingle();
-
-      if (!existingUser) {
-        throw new Error('No registered account found with this email address. Please register or verify the spelling.');
-      }
-
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
     }
     return true;
   },

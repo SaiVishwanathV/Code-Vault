@@ -128,13 +128,15 @@ export function App() {
   // Problem Handlers
   const handleSaveProblem = async (formData: any) => {
     try {
+      let updatedList: Problem[];
       if (formData.id) {
         // Edit existing
         const updated = await problemService.updateProblem(formData.id, {
           ...formData,
           user_id: user?.id,
         });
-        setProblems((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        updatedList = problems.map((p) => (p.id === updated.id ? updated : p));
+        setProblems(updatedList);
         success('Problem Updated', `"${updated.problem_name}" was successfully updated.`);
       } else {
         // Add new
@@ -142,13 +144,16 @@ export function App() {
           ...formData,
           user_id: user?.id,
         });
-        setProblems((prev) => [added, ...prev]);
+        updatedList = [added, ...problems];
+        setProblems(updatedList);
         triggerConfetti();
         success('Problem Conquered!', `"${added.problem_name}" recorded into your Vault.`);
       }
-      // Re-calculate streaks
-      const newStreak = await streakService.getStreak(user?.id, problems);
+
+      // Immediately re-calculate and sync streaks with the fresh updated list
+      const newStreak = await streakService.getStreak(user?.id, updatedList);
       setStreak(newStreak);
+      await achievementService.evaluateAchievements(updatedList, newStreak);
     } catch (err: any) {
       showError('Action Failed', err.message);
     }
@@ -157,7 +162,13 @@ export function App() {
   const handleDeleteProblem = async (id: string) => {
     try {
       await problemService.deleteProblem(id, user?.id);
-      setProblems((prev) => prev.filter((p) => p.id !== id));
+      const updatedList = problems.filter((p) => p.id !== id);
+      setProblems(updatedList);
+
+      const newStreak = await streakService.getStreak(user?.id, updatedList);
+      setStreak(newStreak);
+      await achievementService.evaluateAchievements(updatedList, newStreak);
+
       success('Problem Deleted', 'Removed from your records.');
     } catch (err: any) {
       showError('Delete Failed', err.message);
