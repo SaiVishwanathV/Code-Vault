@@ -57,10 +57,10 @@ export const ResetPasswordPage: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/')}
               className="w-full py-3 px-4 rounded-xl bg-[#E9B949] hover:bg-[#D4A32D] text-[#1A202C] font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2"
             >
-              <span>Go to Dashboard</span>
+              <span>Sign In to CodeVault</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

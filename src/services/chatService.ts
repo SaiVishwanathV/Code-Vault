@@ -447,7 +447,7 @@ export const chatService = {
   },
 
   /**
-   * Toggle pinned message
+   * Toggle pinned message in Supabase
    */
   async togglePinMessage(roomId: string, messageId: string): Promise<boolean> {
     const messages = getStoredMessages();
@@ -466,7 +466,25 @@ export const chatService = {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('chat_messages').update({ is_pinned: isPinned }).eq('id', messageId);
+        // Try RPC first for security definer bypass
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc('toggle_pin_chat_message', {
+          p_room_id: roomId,
+          p_message_id: messageId,
+        });
+
+        if (!rpcErr && rpcResult !== null) {
+          isPinned = rpcResult;
+        } else {
+          // Direct table update fallback
+          const { error } = await supabase
+            .from('chat_messages')
+            .update({ is_pinned: isPinned })
+            .eq('id', messageId);
+
+          if (error) {
+            console.error('Error updating pin on Supabase:', error);
+          }
+        }
       } catch (err) {
         console.error('Error updating pin on Supabase:', err);
       }

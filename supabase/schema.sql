@@ -153,8 +153,9 @@ ALTER TABLE public.achievements ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles Policies
 DROP POLICY IF EXISTS "Public profiles are viewable by authenticated users" ON public.profiles;
-CREATE POLICY "Public profiles are viewable by authenticated users" 
-  ON public.profiles FOR SELECT USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "Profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Profiles are viewable by everyone" 
+  ON public.profiles FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
 CREATE POLICY "Users can insert their own profile" 
@@ -241,6 +242,10 @@ CREATE POLICY "Messages are viewable by authenticated users"
 DROP POLICY IF EXISTS "Authenticated users can post messages" ON public.chat_messages;
 CREATE POLICY "Authenticated users can post messages" 
   ON public.chat_messages FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Authenticated users can update messages (pin/react)" ON public.chat_messages;
+CREATE POLICY "Authenticated users can update messages (pin/react)" 
+  ON public.chat_messages FOR UPDATE USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Author or admin can delete message" ON public.chat_messages;
 CREATE POLICY "Author or admin can delete message" 
@@ -465,5 +470,96 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.user_delete_own_account() TO authenticated;
+
+-- ==============================================================================
+-- USERNAME EMAIL LOOKUP FUNCTION (Unauthenticated / Authenticated)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.get_email_by_username(p_username TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  found_email TEXT;
+  clean_uname TEXT;
+BEGIN
+  clean_uname := lower(trim(replace(p_username, '@', '')));
+  SELECT email INTO found_email
+  FROM public.profiles
+  WHERE lower(trim(replace(username, '@', ''))) = clean_uname
+  LIMIT 1;
+
+  RETURN found_email;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_email_by_username(TEXT) TO anon, authenticated;
+
+-- ==============================================================================
+-- DUPLICATE EMAIL / USERNAME VALIDATION FUNCTION
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.check_user_exists(p_email TEXT, p_username TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  email_exists BOOLEAN := FALSE;
+  username_exists BOOLEAN := FALSE;
+  clean_email TEXT := lower(trim(p_email));
+  clean_uname TEXT := lower(trim(replace(p_username, '@', '')));
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE lower(email) = clean_email) THEN
+    email_exists := TRUE;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE lower(trim(replace(username, '@', ''))) = clean_uname) THEN
+    username_exists := TRUE;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'email_exists', email_exists,
+    'username_exists', username_exists
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.check_user_exists(TEXT, TEXT) TO anon, authenticated;
+
+-- ==============================================================================
+-- TOGGLE PIN CHAT MESSAGE FUNCTION
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.toggle_pin_chat_message(p_room_id TEXT, p_message_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  current_pin_state BOOLEAN;
+  new_pin_state BOOLEAN;
+BEGIN
+  SELECT COALESCE(is_pinned, FALSE) INTO current_pin_state
+  FROM public.chat_messages
+  WHERE id = p_message_id AND room_id = p_room_id;
+
+  IF current_pin_state IS NULL THEN
+    RAISE EXCEPTION 'Message not found in the room.';
+  END IF;
+
+  new_pin_state := NOT current_pin_state;
+
+  UPDATE public.chat_messages
+  SET is_pinned = new_pin_state
+  WHERE id = p_message_id AND room_id = p_room_id;
+
+  RETURN new_pin_state;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.toggle_pin_chat_message(TEXT, TEXT) TO authenticated;
+
 
 

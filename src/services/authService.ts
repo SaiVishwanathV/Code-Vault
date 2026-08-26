@@ -1,21 +1,20 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Profile } from '../types';
 
-const LOCAL_STORAGE_USER_KEY = 'codevault_current_user';
-const PENDING_OTP_EMAIL_KEY = 'codevault_pending_otp_email';
-const PENDING_OTP_DATA_KEY = 'codevault_pending_otp_data';
-
 export interface SignUpData {
-  fullName: string;
-  username: string;
   email: string;
+  username: string;
+  fullName: string;
   password?: string;
 }
 
+const LOCAL_STORAGE_USER_KEY = 'codevault_current_user_v1';
+const PENDING_OTP_EMAIL_KEY = 'codevault_pending_otp_email';
+const PENDING_OTP_DATA_KEY = 'codevault_pending_otp_data';
+
 export const authService = {
   /**
-   * Register a new user with Supabase Email OTP
-   * Validates duplicate email and username before requesting signup
+   * Register a new user account with duplicate validation
    */
   async signUp(data: SignUpData) {
     const cleanEmail = data.email.trim().toLowerCase();
@@ -28,29 +27,55 @@ export const authService = {
         : 'user';
 
     if (isSupabaseConfigured() && supabase) {
-      // 1. Check if email already exists in profiles
-      const { data: existingEmail } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', cleanEmail)
-        .maybeSingle();
+      // 1. Check duplicate email and username via RPC or direct query
+      try {
+        const { data: checkData } = await supabase.rpc('check_user_exists', {
+          p_email: cleanEmail,
+          p_username: cleanUsername,
+        });
 
-      if (existingEmail) {
-        throw new Error('An account with this email already exists.');
+        if (checkData) {
+          if (checkData.email_exists) {
+            throw new Error('Email already exists. Please sign in or use Forgot Password.');
+          }
+          if (checkData.username_exists) {
+            throw new Error('Username already taken. Please choose another username.');
+          }
+        }
+      } catch (rpcErr: any) {
+        // Fallback to table check if RPC is not yet created
+        if (rpcErr.message?.includes('Email already exists') || rpcErr.message?.includes('Username already taken')) {
+          throw rpcErr;
+        }
+
+        try {
+          const { data: existingEmail } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+          if (existingEmail) {
+            throw new Error('Email already exists. Please sign in or use Forgot Password.');
+          }
+
+          const { data: existingUsername } = await supabase
+            .from('profiles')
+            .select('id')
+            .ilike('username', cleanUsername)
+            .maybeSingle();
+
+          if (existingUsername) {
+            throw new Error('Username already taken. Please choose another username.');
+          }
+        } catch (innerErr: any) {
+          if (innerErr.message?.includes('Email already exists') || innerErr.message?.includes('Username already taken')) {
+            throw innerErr;
+          }
+        }
       }
 
-      // 2. Check if username already exists in profiles
-      const { data: existingUsername } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('username', cleanUsername)
-        .maybeSingle();
-
-      if (existingUsername) {
-        throw new Error(`Username '@${cleanUsername}' is already taken. Please choose a different username.`);
-      }
-
-      // 3. Register user in Supabase Auth
+      // 2. Register user in Supabase Auth
       const { data: authData, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: data.password || 'TemporaryPassword123!',
@@ -64,12 +89,9 @@ export const authService = {
       });
 
       if (error) {
-        if (
-          error.message?.toLowerCase().includes('already registered') ||
-          error.message?.toLowerCase().includes('unique') ||
-          error.message?.toLowerCase().includes('exists')
-        ) {
-          throw new Error('An account with this email already exists.');
+        const msg = error.message?.toLowerCase() || '';
+        if (msg.includes('already registered') || msg.includes('unique') || msg.includes('exists') || msg.includes('user already exists')) {
+          throw new Error('Email already exists. Please sign in or use Forgot Password.');
         }
         throw error;
       }
@@ -156,7 +178,7 @@ export const authService = {
   },
 
   /**
-   * Sign in with Email OR Username
+   * Sign in with Email OR Username / User ID
    */
   async signIn(identifier: string, password?: string) {
     const cleanIdentifier = identifier.trim();
@@ -166,16 +188,42 @@ export const authService = {
       // If user passed a username (no '@'), lookup their email in profiles
       if (!cleanIdentifier.includes('@')) {
         const usernameQuery = cleanIdentifier.replace(/^@/, '').toLowerCase();
-        const { data: profileMatch, error: profErr } = await supabase
-          .from('profiles')
-          .select('email, username')
-          .ilike('username', usernameQuery)
-          .maybeSingle();
 
-        if (profErr || !profileMatch?.email) {
-          throw new Error(`No account found with username @${usernameQuery}. Please check your spelling.`);
+        // 1. Try secure RPC lookup
+        let resolvedEmail: string | null = null;
+        try {
+          const { data: rpcEmail } = await supabase.rpc('get_email_by_username', {
+            p_username: usernameQuery,
+          });
+          if (rpcEmail) {
+            resolvedEmail = rpcEmail;
+          }
+        } catch {
+          // fallback
         }
-        emailToUse = profileMatch.email.trim();
+
+        // 2. Fallback to direct query on profiles
+        if (!resolvedEmail) {
+          try {
+            const { data: profileMatch } = await supabase
+              .from('profiles')
+              .select('email, username')
+              .ilike('username', usernameQuery)
+              .maybeSingle();
+
+            if (profileMatch?.email) {
+              resolvedEmail = profileMatch.email;
+            }
+          } catch {
+            // fallback
+          }
+        }
+
+        if (!resolvedEmail) {
+          throw new Error(`No account found with username @${usernameQuery}. Please verify your username or log in with your email.`);
+        }
+
+        emailToUse = resolvedEmail.trim();
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -220,14 +268,22 @@ export const authService = {
 
   /**
    * Request password reset email using Supabase Auth
+   * Uses deployed domain https://c0dev4ult.web.app in production
    */
   async resetPassword(email: string) {
     const cleanEmail = email.trim().toLowerCase();
 
     if (isSupabaseConfigured() && supabase) {
+      // Determine redirection URL: strictly use https://c0dev4ult.web.app/reset-password for production
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const redirectUrl = isLocalhost
+        ? `${window.location.origin}/reset-password`
+        : 'https://c0dev4ult.web.app/reset-password';
+
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: redirectUrl,
       });
+
       if (error) {
         throw error;
       }
@@ -249,41 +305,34 @@ export const authService = {
   },
 
   /**
-   * Self delete current user account
+   * Permanently delete own account (Self Delete)
    */
   async deleteOwnAccount() {
     if (isSupabaseConfigured() && supabase) {
-      // 1. Call secure RPC function
-      const { error: rpcError } = await supabase.rpc('user_delete_own_account');
-      if (rpcError) {
-        // Fallback: delete profile row directly
-        const { data: sessionData } = await supabase.auth.getSession();
-        const userId = sessionData?.session?.user?.id;
-        if (userId) {
-          await supabase.from('profiles').delete().eq('id', userId);
-        }
-      }
+      const { error } = await supabase.rpc('user_delete_own_account');
+      if (error) throw error;
       await supabase.auth.signOut();
     }
     this.clearSession();
+    return true;
   },
 
   /**
-   * Safe sign out
+   * Sign out current user
    */
   async signOut() {
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.auth.signOut();
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('Supabase signOut error:', err);
       }
     }
     this.clearSession();
   },
 
   /**
-   * Clear all local storage session traces
+   * Clear local session storage
    */
   clearSession() {
     localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
